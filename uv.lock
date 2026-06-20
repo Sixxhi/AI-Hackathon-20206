@@ -1040,6 +1040,9 @@ source = { editable = "." }
 agent = [
     { name = "anthropic" },
     { name = "arize-phoenix" },
+    { name = "openinference-instrumentation-anthropic" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
 ]
 infra = [
     { name = "redis" },
@@ -1056,6 +1059,9 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'agent'", specifier = ">=0.40" },
     { name = "arize-phoenix", marker = "extra == 'agent'", specifier = ">=5.0" },
+    { name = "openinference-instrumentation-anthropic", marker = "extra == 'agent'", specifier = ">=0.4" },
+    { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'agent'", specifier = ">=1.24" },
+    { name = "opentelemetry-sdk", marker = "extra == 'agent'", specifier = ">=1.24" },
     { name = "redis", marker = "extra == 'infra'", specifier = ">=5.0" },
     { name = "sentry-sdk", marker = "extra == 'infra'", specifier = ">=2.0" },
 ]
@@ -1601,6 +1607,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f9/b6/c0e7e047ae4962f2755a3bc9141fdd6272c75c74e47dfc6aa71978a9b78f/openinference_instrumentation-0.1.53.tar.gz", hash = "sha256:3c0c145cf6e13cfa630b29d0e3ca806f3821470ffca7922f1590e3970fadd4da", size = 33712, upload-time = "2026-06-02T16:37:21.771Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/13/bb/01262d9945c476e15aa21bb9ca05b18604e525d73d9761cadb677f485198/openinference_instrumentation-0.1.53-py3-none-any.whl", hash = "sha256:f43695080eded47b1e03ff1b19cb5c23ea4409459cfe16c5b5748d5656832eb1", size = 40958, upload-time = "2026-06-02T16:37:20.69Z" },
+]
+
+[[package]]
+name = "openinference-instrumentation-anthropic"
+version = "1.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openinference-instrumentation" },
+    { name = "openinference-semantic-conventions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-instrumentation" },
+    { name = "opentelemetry-semantic-conventions" },
+    { name = "typing-extensions" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/47/19/4dbfd34d997ab3a9fa02b985130282b7be1ca40a138b2520a5fb7fab8f3a/openinference_instrumentation_anthropic-1.0.6.tar.gz", hash = "sha256:da4cb6e8784d5b5f568f430ab2e81cbc61be2e7c87b97eacea34d9b3a3336bf6", size = 16031, upload-time = "2026-06-02T16:37:21.863Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4b/74/2263a8139b72760c88bad4af3f6f3c7e29dad2c93b977c6cb69a6b01f207/openinference_instrumentation_anthropic-1.0.6-py3-none-any.whl", hash = "sha256:e9834c0bf65523e541204168ec6f1c0a1ad49bfb20edda1f511e3d5a540f7d2f", size = 19307, upload-time = "2026-06-02T16:37:20.671Z" },
 ]
 
 [[package]]
