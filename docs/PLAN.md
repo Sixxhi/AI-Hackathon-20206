@@ -43,6 +43,10 @@ is the only ordering constraint:
 
 Everyone else starts immediately, in parallel.
 
+> **Granular tasks live in [docs/tasks/](tasks/)** — one file per person, each a
+> tracer-bullet slice with acceptance criteria. The summaries below are the
+> overview; grab your file there to actually work.
+
 ## Per-person: first task → done
 
 ### P1 — Moat (`replay.py`) · *protect the wedge, feed the dashboard*
