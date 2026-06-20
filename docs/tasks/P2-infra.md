@@ -50,18 +50,25 @@ in-memory one (same culprit, same accuracy).
 ---
 
 ### P2-4 · 🟡 should · ~1.5 h · dep: P2-3
-## Vector search (the Redis headline)
-Upgrade retrieval to Redis-native vector search.
+## Vector search via RedisVL (the Redis headline + prize criterion)
+Upgrade retrieval to vector search using **RedisVL** (a prize-qualifying tool —
+makes "Redis beyond caching" obvious). Needs a Redis with the query engine:
+`redis:latest` Docker or Redis Cloud (not the brew 8.6.3 here).
 
 **Steps**
+- `pip install redisvl` (add to the `infra` extra).
 - Add an `embedding` field to `MemoryRecord` (additive — announce the schema change).
-- On `add`, `VADD` the embedding; on `search`, `VSIM` for nearest (then apply the
-  admission gate). Embeddings: a deterministic stub is fine for the demo, or wire
-  a real embedder. See [../REDIS.md](../REDIS.md#vector-search--two-options-both-are-redis-native).
-- **Load the working set into memory for replay** — do not VSIM inside `replay()`.
+- Define a RedisVL `SearchIndex` (fields: text, topic, source, trust, status,
+  embedding[VECTOR]); `index.load()` on add; `VectorQuery` on search, then apply
+  the admission gate. Embeddings: a deterministic stub is fine for the demo.
+- **Load the working set into memory for replay** — never query inside `replay()`.
+- See [../REDIS.md](../REDIS.md#vector-search--use-redisvl-the-prize-qualifying-path).
 
-**Done when** retrieval uses vector similarity for the live turn; demo still green;
-`redis-cli` shows the vector set.
+**Done when** retrieval uses RedisVL vector similarity for the live turn; demo
+still green; the index is visible via `redis-cli FT._LIST`.
+
+> Quick win for the "beyond caching" criterion: also run
+> `npx skills add redis/agent-skills` so Claude Code writes idiomatic Redis.
 
 ---
 

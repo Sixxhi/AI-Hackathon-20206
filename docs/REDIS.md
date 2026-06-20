@@ -8,6 +8,39 @@ trust/risk, quarantine status) and powers **live retrieval** via vector search.
 > Replay runs on an in-memory working set. See
 > [ARCHITECTURE.md](ARCHITECTURE.md#why-determinism-is-the-moat-not-a-limitation).
 
+## Prize & how IMMUNE qualifies 🏆
+
+**Best Use of Redis** — Mac Minis (one per team member) + 25k Redis Cloud credits +
+backpacks. Worth aiming for, because IMMUNE fits the criteria almost too well.
+
+**Qualify:** use any qualified Redis tool — **Redis Cloud, Redis OSS, RedisVL,
+Agent Memory Server, Redis AI Incubator** — and show it **clearly in the demo and
+the GitHub repo**. Built this weekend, no plagiarism.
+
+**Judging criteria → our angle:**
+1. **Using Redis *beyond caching*** (their #1) — agent memory, vector search,
+   context retrieval. IMMUNE *is* an agent-memory system: memories + embeddings +
+   trust/quarantine state, retrieved by vector search. Lead with this.
+2. **Creativity / originality** — "immune system for agent memory" + counterfactual
+   replay is a genuinely novel use of a memory store.
+3. **Technical implementation** — correctness, architecture. The clean
+   `store.py` swap-seam + `redis-cli`-visible trust scores show real engineering.
+
+> Make it obvious on screen: show `redis-cli KEYS 'immune:*'` / the vector index,
+> and say "Redis is our memory substrate" in the pitch.
+
+## Credits + Cloud setup ($50, code `CALHACKER2026`)
+
+For a shared/cloud store (also a clean demo backup):
+1. **redis.io/login** → create account → **+ Database**
+2. **Essentials tier** (best for the hack); pick size + cloud provider; **turn off
+   High Availability** (saves credits)
+3. Add credit code **`CALHACKER2026`** ($50) → **Confirm & Pay**
+4. Copy the connection string into `.env` → `REDIS_URL=redis://default:<pw>@<host>:<port>/0`
+
+**Workshop:** vector search + caching + agent memory — today **4:00–5:00 PM, 5th
+Floor, Tilden Room**. Booth + Slack for setup help.
+
 ## Status on this machine ✅
 
 A local Redis (Homebrew, **v8.6.3**) is already running on `localhost:6379` and is
@@ -51,16 +84,47 @@ uv sync --extra infra      # or: make lane-infra  (installs redis-py + sentry-sd
 uv run --extra infra python -c "import redis,os; r=redis.from_url(os.getenv('REDIS_URL','redis://localhost:6379/0')); print(r.ping())"
 ```
 
-## Vector search — two options (both are Redis-native)
+## Vector search — use RedisVL (the prize-qualifying path)
 
-| Approach | Commands | Needs | Notes |
-|----------|----------|-------|-------|
-| **Vector sets** (Redis 8) | `VADD` / `VSIM` | any Redis 8 (brew 8.6.3 here ✓) | Simplest. Add a vector with an id, query nearest. Great for v1. |
-| **RediSearch index** | `FT.CREATE ... VECTOR HNSW ...` / `FT.SEARCH` | `redis:latest` Docker / Redis Stack (brew 8.6.3 here does **not** have `FT.*`) | Richer: filter by metadata (status, source) alongside the vector query. |
+**RedisVL** (Redis Vector Library) is a listed *qualified tool* and the cleanest
+Python path — use it so the prize criterion "Using Redis beyond caching" is
+obvious. `pip install redisvl` (add to the `infra` extra).
 
-Recommendation: start with **vector sets** (works on the Redis already running
-here); move to `FT.*` only if you need metadata-filtered vector queries — and if so,
-use the Docker image (option A).
+```python
+from redisvl.index import SearchIndex
+from redisvl.query import VectorQuery
+# define a schema (fields: text, topic, source, trust, status, embedding[VECTOR])
+# index.create(); index.load(records); index.query(VectorQuery(vector=..., ...))
+```
+RedisVL uses the `FT.*` search engine under the hood, so it needs a Redis with the
+**query engine**: `redis:latest` Docker (option A) or **Redis Cloud** — *not* the
+brew 8.6.3 here (it has vector sets but no `FT.*`). Easiest: run option A's
+container, or use the Cloud DB you create with the credits.
+
+Lower-level alternatives if you don't want RedisVL:
+
+| Approach | Commands | Needs |
+|----------|----------|-------|
+| **Vector sets** | `VADD` / `VSIM` | any Redis 8 (brew 8.6.3 ✓) — works *now*, but RedisVL reads better in the demo |
+| **Raw RediSearch** | `FT.CREATE ... VECTOR HNSW` / `FT.SEARCH` | `redis:latest` / Cloud |
+
+Either way: **load the working set into memory for replay** — never run a vector
+query inside `replay()`.
+
+## Redis AI tools worth leveraging (for the "beyond caching" criterion)
+
+The judges explicitly reward using Redis's AI tooling. Options, easiest first:
+
+- **`npx skills add redis/agent-skills`** — Redis's Agent Skill so Claude Code
+  writes Redis code the expert way (same idea as the Arize skills). Fastest start.
+- **RedisVL** — vector DB / semantic cache / LLM memory / semantic routing (above).
+- **Agent Memory Server** — RESTful + MCP server for dual-tiered agent memory
+  (session "working" + persistent "long-term").
+  https://github.com/redis-developer/agent-memory-server — a strong "agent memory"
+  story, but it's a separate service with its own memory model; only adopt as the
+  substrate if it fits the deterministic-replay design (evaluate before committing).
+- **Redis AI Incubator** — experimental tools incl. `claude-mcp-redis`, `adk-redis`.
+  https://redis.io/ai-incubator/
 
 ## How it plugs into IMMUNE (P2 lane)
 
