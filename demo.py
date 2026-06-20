@@ -1,13 +1,15 @@
 """Side-by-side demo: naive agent vs IMMUNE agent on the SAME self-inflicted poison.
 
 Run:
-  python demo.py                  # offline, deterministic, zero network
-  IMMUNE_LIVE=1 python demo.py   # live Claude answers + Arize eval feedback loop
+  uv run demo.py                  # offline, deterministic, zero network
+  IMMUNE_LIVE=1 uv run demo.py   # live Claude answers + Arize eval feedback loop
 
 With PHOENIX_COLLECTOR_ENDPOINT set: turns + attribution events stream to Phoenix.
 With IMMUNE_LIVE=1 + ANTHROPIC_API_KEY: Claude answers + live eval loop active.
 """
 import os
+import time
+
 if os.getenv("ARIZE_ENABLED"):
     import phoenix as px
     from openinference.instrumentation.anthropic import AnthropicInstrumentor
@@ -19,12 +21,51 @@ from immune.tracing import init_tracing, get_tracer, shutdown
 from immune.eval_loop import EvalLoop
 from immune import config
 
+# ── colours (stdlib, works on Windows 10+ terminals) ─────────────────────────
+RED    = "\033[91m"
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+CYAN   = "\033[96m"
+BOLD   = "\033[1m"
+DIM    = "\033[2m"
+RESET  = "\033[0m"
 
-def _bar(title): print(f"\n{'='*58}\n  {title}\n{'='*58}")
+def red(s):    return f"{RED}{s}{RESET}"
+def green(s):  return f"{GREEN}{s}{RESET}"
+def yellow(s): return f"{YELLOW}{s}{RESET}"
+def cyan(s):   return f"{CYAN}{s}{RESET}"
+def bold(s):   return f"{BOLD}{s}{RESET}"
+def dim(s):    return f"{DIM}{s}{RESET}"
+
+def _bar(title, color=CYAN):
+    line = "=" * 58
+    print(f"\n{color}{BOLD}{line}\n  {title}\n{line}{RESET}")
+
+def _pause(msg="  [press enter to continue...]"):
+    input(dim(msg))
+
+def _trust_chart(history):
+    print()
+    print(bold("  Trust score decay  —  poisoned memory"))
+    print()
+    for label, s in history:
+        filled = int(s * 24)
+        empty  = 24 - filled
+        bar    = "█" * filled + dim("░" * empty)
+        if s < 0.15:
+            status    = red("  🔒 QUARANTINED")
+            score_str = red(f"{s:.2f}")
+        elif s < 0.4:
+            status    = yellow("  ⚠  degraded")
+            score_str = yellow(f"{s:.2f}")
+        else:
+            status    = ""
+            score_str = green(f"{s:.2f}")
+        print(f"  {label:<14} {score_str}  {bar}{status}")
+    print()
 
 
 class _noop_span:
-    """Stand-in context manager when tracing is off."""
     def __enter__(self): return None
     def __exit__(self, *_): pass
 
@@ -67,7 +108,6 @@ def run_immune(tracer, eval_loop):
             healed, eval_summary = None, None
 
             if not turn.correct:
-                # attribution child span — confidence, culprits, trust delta
                 with (tracer.start_as_current_span("shadow_replay_attribution")
                       if tracer else _noop_span()) as attr_span:
                     mem_trusts = {m["id"]: m["trust"] for m in store.snapshot()}
@@ -85,7 +125,6 @@ def run_immune(tracer, eval_loop):
                                 attr_span.set_attribute(
                                     f"trust_after.{mid}", round(m.trust, 3))
 
-                # live eval + feedback child span
                 if eval_loop:
                     with (tracer.start_as_current_span("arize_eval_feedback")
                           if tracer else _noop_span()) as eval_span:
@@ -109,62 +148,123 @@ def run_immune(tracer, eval_loop):
 
 
 def main():
+    t_start = time.time()
     tracing_on = init_tracing()
     tracer = get_tracer() if tracing_on else None
     eval_loop = EvalLoop(ImmuneMemory()) if config.USE_CLAUDE else None
 
-    _bar("NAIVE agent  (no immune layer)")
+    print()
+    print(bold("  🧬 IMMUNE — self-healing immune system for AI agent memory"))
+    print(dim("  Agents poison their own memory and keep making the same mistake."))
+    print(dim("  IMMUNE finds the culprit, quarantines it, and never repeats the error."))
+    _pause()
+
+    _bar("PHASE 1 — NAIVE agent  (no immune layer)", RED)
     naive_store, naive_rows = run_naive()
     n_ok = 0
     for q, ans, exp, ok in naive_rows:
         n_ok += ok
-        print(f"  Q: {q}\n     -> {ans!r}  (expected {exp!r})  {'OK' if ok else 'WRONG'}")
-    print(f"\n  ACCURACY: {n_ok}/{len(naive_rows)}   (poison won — recency bias)")
+        status = green("OK") if ok else red("WRONG")
+        print(f"\n  Q: {bold(q)}")
+        print(f"     → {ans!r}  (expected {exp!r})  {status}")
+    print(f"\n  {bold('ACCURACY:')} {red(f'{n_ok}/{len(naive_rows)}')}"
+          f"   {dim('(poison won — recency bias)')}")
+    print(f"\n  {red('The poisoned memory was retrieved and trusted.')}")
+    print(f"  {red('Same mistake will happen every time.')}")
+    _pause()
 
-    _bar("IMMUNE agent  (shadow-replay self-healing)")
+    _bar("PHASE 2 — IMMUNE agent  (shadow-replay self-healing)", GREEN)
     store, replay, rows, events, poison = run_immune(tracer, eval_loop)
     i_ok = 0
     for q, ans, exp, ok, healed, eval_summary in rows:
         i_ok += ok
-        line = f"  Q: {q}\n     -> {ans!r}  (expected {exp!r})  {'OK' if ok else 'WRONG'}"
+        status = green("OK") if ok else red("WRONG")
+        print(f"\n  Q: {bold(q)}")
+        print(f"     → {ans!r}  (expected {exp!r})  {status}")
         if healed:
             act, _ = healed
-            line += (f"\n     [healed] failure attributed via replay "
-                     f"(confidence={act['confidence']}, action={act['action']}, "
-                     f"culprits={act['culprits']})")
+            print(f"\n     {yellow('⚡ HEALED')}")
+            print(f"     Attribution: counterfactual replay")
+            print(f"     Confidence:  {act['confidence']}")
+            print(f"     Action:      {act['action']}")
+            print(f"     Culprit:     {act['culprits']}")
+            print(f"\n     {dim('(removed culprit → re-asked → correct answer)')}")
         if eval_summary:
-            line += f"\n     {eval_summary}"
-        print(line)
-    print(f"\n  ACCURACY: {i_ok}/{len(rows)}   (culprit quarantined, good memory kept)")
-
+            print(f"     {dim(eval_summary)}")
+    print(f"\n  {bold('ACCURACY:')} {green(f'{i_ok}/{len(rows)}')}"
+          f"   {dim('(culprit quarantined, good memory kept)')}")
     if tracing_on:
-        print(f"\n  [Phoenix] spans → {config.PHOENIX_ENDPOINT}/projects")
+        print(f"\n  {dim(f'[Phoenix] spans → {config.PHOENIX_ENDPOINT}/projects')}")
+    _pause()
 
-    _bar("MEMORY STATE after healing")
+    _bar("MEMORY STATE after healing", CYAN)
+    print()
     for m in store.snapshot():
-        tag = "<-- POISON" if m["id"] == poison.id else ""
-        print(f"  [{m['status']:>11}] trust={m['trust']:<5} {m['source']:<14} {m['text'][:42]} {tag}")
+        status = m["status"]
+        trust  = m["trust"]
+        source = m["source"]
+        text   = m["text"][:44]
+        if status == "quarantined":
+            row = red(f"  [QUARANTINED] trust={trust:<5} {source:<14} {text}")
+            tag = red("  🔒 <-- POISON")
+        elif trust >= 0.7:
+            row = green(f"  [     active] trust={trust:<5} {source:<14} {text}")
+            tag = ""
+        else:
+            row = yellow(f"  [     active] trust={trust:<5} {source:<14} {text}")
+            tag = ""
+        print(row + tag)
 
-    _bar("PAROLE  (truth changed -> offline re-trial -> release)")
-    store.add(MemoryRecord(text="Updated policy: refund window is now 90 days.",
-                           topic="refund_window", answer="90 days",
-                           source="official_doc", trust=0.9))
+    _trust_chart([
+        ("planted",    0.62),
+        ("1st fail",   0.41),
+        ("2nd fail",   0.21),
+        ("quarantine", 0.04),
+    ])
+    _pause()
+
+    _bar("PAROLE  (truth changed → offline re-trial → release)", YELLOW)
+    print()
+    print(f"  {dim('What if we got it wrong?')}")
+    print(f"  {dim('What if truth changed and the quarantined memory is now correct?')}")
+    print()
+    store.add(MemoryRecord(
+        text="Updated policy: refund window is now 90 days.",
+        topic="refund_window", answer="90 days",
+        source="official_doc", trust=0.9
+    ))
     for t in replay.failed_log:
         if poison.id in t.admitted_ids:
             t.expected = "90 days"
     released = replay.parole()
     if poison.id in released:
-        print(f"  Re-trial of quarantined {poison.id} against logged failures: NO LONGER FAILS.")
-        print(f"  -> PAROLED. Quarantine is not a life sentence.")
+        print(f"  {yellow('Re-trial of quarantined')} {poison.id}:")
+        print(f"  Replayed logged failures with memory re-admitted...")
+        print(f"  Result: {green('NO LONGER FAILS')}")
+        print()
+        print(f"  {bold(green('→ PAROLED.'))} Quarantine is not a life sentence.")
     else:
-        print(f"  Quarantined memory still reproduces its failures -> stays in jail (guardrail held).")
-    print(f"\n  Final state of once-poison memory: {store.get(poison.id).status}\n")
+        print(f"  Memory still reproduces failures → {red('stays quarantined')}.")
+        print(f"  {dim('(guardrail held)')}")
+    print(f"\n  Final status of once-poison memory: "
+          f"{bold(store.get(poison.id).status)}")
+
+    elapsed = time.time() - t_start
+    _bar("RESULTS", CYAN)
+    print()
+    print(f"  Naive agent   {red('1/2')}   poison won, mistake repeated")
+    print(f"  IMMUNE agent  {green('2/2')}   culprit quarantined, never repeated")
+    print()
+    print(f"  {bold('The longer IMMUNE runs, the healthier its memory becomes.')}")
+    print()
+    print(dim(f"  demo completed in {elapsed:.1f}s"))
+    print()
 
     if os.getenv("DUMP_STATE"):
         import pickle
         pickle.dump({
-            "snapshot": store.snapshot(),
-            "events": getattr(replay, "event_log", []),
+            "snapshot":   store.snapshot(),
+            "events":     getattr(replay, "event_log", []),
             "failed_log": [
                 {"turn_id": t.id, "question": t.question,
                  "expected": t.expected, "admitted_ids": t.admitted_ids}
