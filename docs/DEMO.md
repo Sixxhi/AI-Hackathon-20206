@@ -104,7 +104,14 @@ Sponsor angles: **Redis** = the memory substrate ([REDIS.md](REDIS.md)), **Arize
 
 ---
 
-## Coming soon (P4)
-A visual **dashboard** — the trust-score timeline (poison crashing → quarantined),
-the side-by-side, and the quarantine event. It reads `replay.trust_timeline()` and
-`store.snapshot()`; see [tasks/P4-frontend.md](tasks/P4-frontend.md).
+## Visual dashboard
+
+```bash
+make dashboard          # opens http://localhost:8501
+```
+A dark, interactive web view of the same scenario: the **trust-score timeline**
+(poison crashing below the threshold → quarantined), the **naive-vs-IMMUNE
+side-by-side**, the **live memory table** (quarantined rows highlighted), and the
+**parole** verdict. Drag the **quarantine-threshold slider** to explore. Offline +
+deterministic — same engine as `make demo`. (Built with Streamlit; `make lane-frontend`
+installs it.)

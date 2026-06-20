@@ -11,9 +11,12 @@
 > else (layout, side-by-side, memory table) against `store.snapshot()`, which
 > exists today.
 
-**Tech:** Streamlit is the fastest path to a chart that screenshots well
-(`uv add --optional frontend streamlit`); a tiny FastAPI + static HTML also works.
-Pick what you know cold.
+**Tech:** Built with **Streamlit** (`make lane-frontend` / `make dashboard`).
+
+> **✅ P4-1, P4-2, P4-3 shipped** in `dashboard/app.py` (dark theme, Altair trust
+> timeline, side-by-side scorecards, highlighted memory table, parole verdict,
+> threshold slider). Remaining: **P4-4** (richer failure-trace panel), **P4-5**
+> (polish), **P4-6** (backup recording). Build on the existing app.
 
 ---
 
