@@ -62,13 +62,19 @@ ARIZE_API_KEY = os.getenv("ARIZE_API_KEY", "")
 ARIZE_SPACE_ID = os.getenv("ARIZE_SPACE_ID", "")
 ARIZE_PROJECT_NAME = os.getenv("ARIZE_PROJECT_NAME", "immune")
 
+# LIVE = explicit opt-in to call the real LLM in the agent's *answer* path.
+# Default OFF so `make demo` and the tests stay deterministic and offline EVEN
+# WHEN a key is present — the offline demo is our hour-23 safety net. Turn on
+# per-run: `IMMUNE_LIVE=1 make demo`. Note: attribution/replay stays deterministic
+# regardless of this flag (see immune/replay.py) — Claude never enters the blame path.
+LIVE = os.getenv("IMMUNE_LIVE", "").strip().lower() in ("1", "true", "yes", "on")
+LLM_CONFIGURED = bool(LLM_API_KEY)       # capability: a key is available
+
 # feature flags — flip on as each lane lands its integration
-# IMMUNE_LIVE=1 is required to activate any LLM/network calls so tests always
-# run in deterministic mock mode regardless of what keys are in .env.
-_LIVE = os.getenv("IMMUNE_LIVE", "").lower() in ("1", "true", "yes")
+_LIVE = LIVE                             # back-compat alias (some modules import _LIVE)
 USE_REDIS = bool(REDIS_URL)
-USE_LLM = _LIVE and bool(LLM_API_KEY)
-USE_CLAUDE = _LIVE and LLM_PROVIDER == "anthropic" and bool(ANTHROPIC_API_KEY)
+USE_LLM = LIVE and LLM_CONFIGURED        # actually call an LLM in the live answer path
+USE_CLAUDE = USE_LLM and LLM_PROVIDER == "anthropic" and bool(ANTHROPIC_API_KEY)
 USE_SENTRY = bool(SENTRY_DSN)
 USE_ARIZE = bool(ARIZE_API_KEY and ARIZE_SPACE_ID)
 USE_PHOENIX = bool(PHOENIX_ENDPOINT)

@@ -26,7 +26,11 @@ class ShadowReplay:
 
     # --- core: replay one turn under a counterfactual exclusion ---------------
     def replay(self, question: str, expected: str, exclude: tuple[str, ...] = ()) -> bool:
-        ans, _ = self.agent.answer(question, exclude=exclude)
+        # Attribution must be DETERMINISTIC: always replay with the mock backend,
+        # never the live LLM — even in IMMUNE_LIVE mode. A nondeterministic answer
+        # here would make the culprit set flicker and put a model in the blame path
+        # (the exact thing this engine exists to avoid). See ARCHITECTURE.md.
+        ans, _ = self.agent._answer_mock(question, exclude)
         return score(ans, expected)
 
     # --- attribution by ablation (not by a fallible judge) --------------------
