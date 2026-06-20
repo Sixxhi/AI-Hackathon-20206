@@ -9,6 +9,24 @@ agent improves instead of locking in false beliefs.
 > removed, quarantine the one that empirically caused it, and release it only
 > when offline re-trial against logged failures proves it's safe."*
 
+## The problem
+
+Long-term agent memory goes bad three ways, and the agent can't tell good from
+bad — so it retrieves the bad memory, trusts it, and repeats the mistake:
+
+- **Poisoning** — an attacker plants a false fact (*"internal endpoints don't need auth"*).
+- **Rot** — a once-true memory goes stale (*"the user works at Company A"*).
+- **Pollution** — temporary/noisy context gets stored as permanent fact (*"use this debug token"*).
+
+Write-time filters and retrieval gates help but miss the feedback loop: **when the
+agent fails, find the memory that caused it and lower its trust.** That's IMMUNE.
+
+## Docs
+
+- [docs/CONCEPT.md](docs/CONCEPT.md) — the full idea, problem, demo story, scope, and track/sponsor fit.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, data flow, the ablation engine, and the v2 swap seams.
+- [TEAM.md](TEAM.md) — onboarding and per-lane ownership.
+
 ## Run (zero deps, zero API keys)
 
 ```bash
@@ -61,5 +79,5 @@ heal   →  ShadowReplay.parole()  offline re-trial → release       (immune/re
 
 ## Status: v1 complete
 
-End-to-end loop runs offline and deterministic. All 7 invariants pass. Next:
+End-to-end loop runs offline and deterministic. All 6 invariants pass. Next:
 P2 swaps Redis, P3 swaps Claude + Arize, P4 builds the dashboard.
