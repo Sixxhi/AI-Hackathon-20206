@@ -46,14 +46,23 @@ evaluator out of the attribution step.
 - **Arize AX** — hosted platform; use if you want the cloud dashboard / want to
   show the booth your project in their UI.
 
-### CLI + auth (AX)
+### CLI + auth (AX) — non-interactive
 ```bash
-uv tool install arize-ax-cli        # or: pipx install arize-ax-cli
-ax profiles create --api-key YOUR_API_KEY
-# or via env / .env:
-#   ARIZE_API_KEY=your-api-key
-#   ARIZE_SPACE=my-workspace        # space name or base64 ID (see: ax spaces list)
-ax --version && ax profiles show    # verify
+uv tool install arize-ax-cli
+# the bare `--api-key` flag still drops into the arrow-key TUI; pass auth-method too:
+ax profiles create default --auth-method api-key --api-key "$ARIZE_API_KEY"
+ax spaces list      # → your Space ID (base64, e.g. U3BhY2U6...==)
+```
+
+### Already set up on this repo's machine ✅
+Creds live in the gitignored `.env` (`ARIZE_API_KEY`, `ARIZE_SPACE_ID`,
+`ARIZE_PROJECT_NAME=immune`). Verify connectivity + send a test trace anytime:
+```bash
+uv run --extra agent scripts/arize_smoketest.py
+```
+It sends one `immune_turn` → `attribution` span pair to AX. Confirm it landed:
+```bash
+ax projects list    # the `immune` project should be there
 ```
 
 ### Turn on tracing (the actual workshop code)
