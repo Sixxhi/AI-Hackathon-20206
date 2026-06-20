@@ -149,6 +149,31 @@ for $50) → enable LangCache + Agent Memory in the Cloud console → `.env` →
 `pip install -r requirements.txt`. Runs in Jupyter or Colab. (Their notebook uses
 OpenAI; we'd point it at our swappable provider — see [config.py](../immune/config.py).)
 
+**Vendored locally:** the notebook
+[reference/redis_ai_workshop.ipynb](reference/redis_ai_workshop.ipynb), the slide
+deck [reference/redis_workshop_slides.pdf](reference/redis_workshop_slides.pdf)
+(step-by-step Cloud/LangCache/Agent-Memory setup screenshots), and their env
+template [reference/redis_workshop.env.example](reference/redis_workshop.env.example).
+
+### Cloud service setup (from the deck)
+- **Redis DB:** redis.io/try-free → **Databases → New Database → "Try 30 MB for
+  Free"** under Essentials → name, version 8.4, any vendor/region → **Create
+  database** → **Connect** for the connection snippet + username/password.
+- **LangCache:** left nav → **LangCache** → accept preview terms → **Quick create**
+  → copy the API key (**shown once!**).
+- **Agent Memory:** left nav → **Agent Memory** → **Quick create**.
+
+### Their env vars (note: split host/port, not a single URL)
+The workshop uses discrete vars rather than our `REDIS_URL`. Both work with
+redis-py / RedisVL — if you adopt LangCache/Agent Memory, add these to `.env`:
+```
+REDIS_HOST=...  REDIS_PORT=...  REDIS_USER=default  REDIS_PASSWORD=...
+LANGCACHE_URL=...  LANGCACHE_CACHE_ID=...  LANGCACHE_API_KEY=lc1_...
+AGENT_MEMORY_ENDPOINT=...  AGENT_MEMORY_STORE_ID=...  AGENT_MEMORY_API_KEY=mem1_...
+```
+(IMMUNE's [config.py](../immune/config.py) reads `REDIS_URL`; either compose it
+from host/port/password or add these vars if a lane needs the managed services.)
+
 ## How it plugs into IMMUNE (P2 lane)
 
 Swap the internals of [immune/store.py](../immune/store.py) behind the **same**
