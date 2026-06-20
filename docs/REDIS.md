@@ -128,6 +128,10 @@ The judges explicitly reward using Redis's AI tooling. Options, easiest first:
   + Arize evals; counts as "beyond caching" AI tooling).
 - **Redis AI Incubator** — experimental tools incl. `claude-mcp-redis`, `adk-redis`.
   https://redis.io/ai-incubator/
+- **redis-ai-resources / python-recipes** — Redis's official cookbook of runnable
+  Jupyter recipes: vector search, RAG, semantic cache, agent memory, RedisVL.
+  Best copy-paste source for P2.
+  https://github.com/redis-developer/redis-ai-resources/tree/main/python-recipes
 
 ## Workshop reference — "Hack Buddy"
 Redis's hands-on workshop repo (the one from the session):
