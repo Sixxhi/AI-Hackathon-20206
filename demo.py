@@ -8,6 +8,7 @@ With PHOENIX_COLLECTOR_ENDPOINT set: turns + attribution events stream to Phoeni
 With IMMUNE_LIVE=1 + ANTHROPIC_API_KEY: Claude answers + live eval loop active.
 """
 import os
+import sys
 import time
 
 if os.getenv("ARIZE_ENABLED"):
@@ -42,7 +43,8 @@ def _bar(title, color=CYAN):
     print(f"\n{color}{BOLD}{line}\n  {title}\n{line}{RESET}")
 
 def _pause(msg="  [press enter to continue...]"):
-    input(dim(msg))
+    if sys.stdin.isatty():
+        input(dim(msg))
 
 def _trust_chart(history):
     print()
