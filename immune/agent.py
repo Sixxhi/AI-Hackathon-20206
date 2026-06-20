@@ -74,7 +74,7 @@ class Agent:
 
         client = self._get_client()
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=config.AGENT_MODEL,
             max_tokens=64,
             system=(
                 "You are a customer support agent. Answer the question using ONLY "
