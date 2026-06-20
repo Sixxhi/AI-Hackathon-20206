@@ -9,8 +9,12 @@ the dashboard. Read [../ARCHITECTURE.md](../ARCHITECTURE.md) first.
 
 ---
 
-### P1-1 · 🔴 must · ~45 min · unblocks P4
+### P1-1 · ✅ DONE · unblocks P4
 ## Emit `trust_history`
+**Shipped:** `ShadowReplay.trust_history` (per-event snapshots) + `trust_timeline()`
+→ `{mem_id: [(turn, trust), ...]}`. Baseline recorded at "start", then after each
+failure and parole. P4 can plot it now. Covered by `test_trust_history_tracks_poison_drop`.
+
 The dashboard needs trust-over-time to draw the money-shot chart. Snapshot trust
 after every change so P4 can plot it.
 

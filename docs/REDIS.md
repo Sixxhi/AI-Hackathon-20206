@@ -131,9 +131,10 @@ The judges explicitly reward using Redis's AI tooling. Options, easiest first:
 
 ## Workshop reference — "Hack Buddy"
 Redis's hands-on workshop repo (the one from the session):
-**https://github.com/justin-cechmanek/berkeley-ai-hackathon**
+**https://github.com/justin-cechmanek/berkeley-ai-hackathon** — and the notebook is
+vendored locally at [reference/redis_ai_workshop.ipynb](reference/redis_ai_workshop.ipynb).
 
-A single notebook (`redis_ai_workshop.ipynb`) builds a knowledge-grounded chatbot
+The notebook builds a knowledge-grounded chatbot
 across the three features we care about — copy the patterns, swap their chatbot
 for IMMUNE:
 
