@@ -105,8 +105,33 @@ Paste into Claude Code / Cursor:
 
 It auto-detects the stack and proposes instrumentation across 30+ integrations.
 
-### Helpful resources
-- Skills plugin: `npx skills add Arize-ai/arize-skills`
+### Arize Skills for coding agents — https://github.com/Arize-ai/arize-skills
+Agent-integrated skills that let Claude Code / Cursor / Codex (40+ agents) do the
+Arize work for you — instrument, trace, build evaluators, run experiments,
+optimize prompts. Since we're already building IMMUNE with Claude Code, this is
+the fastest path to wiring P3.
+
+```bash
+npx skills add Arize-ai/arize-skills              # interactive picker
+npx skills add Arize-ai/arize-skills --skill "*" --yes   # install all, non-interactive
+```
+Prereq: the `ax` CLI (already installed + authed on this machine — see above).
+
+The nine skills, mapped to IMMUNE's needs:
+
+| Skill | What it does | Use in IMMUNE |
+|-------|--------------|---------------|
+| `arize-instrumentation` | Auto-add tracing to an app | P3: wrap the agent turns |
+| `arize-trace` | Export/debug traces by id or session | Inspect a failed turn's spans |
+| `arize-evaluator` | Build LLM-as-judge evaluators | The failure *detector* (Faithfulness/Correctness) |
+| `arize-experiment` | Run experiments against datasets | Naive-vs-IMMUNE comparison run |
+| `arize-dataset` | Create/manage datasets | Hold the benchmark turns |
+| `arize-ai-provider-integration` | Manage LLM keys (OpenAI/Anthropic/Azure) | Pairs with our swappable `IMMUNE_LLM_PROVIDER` |
+| `arize-annotation` | Annotation configs | Human labels for the meta-eval (Step 8) |
+| `arize-prompt-optimization` | Optimize prompts from trace data | Optional: improve the live agent |
+| `arize-prompts` | Manage Prompt Hub templates | Optional |
+
+### Other resources
 - Tracing-assistant MCP (Cursor → Settings → MCP):
   ```json
   "arize-tracing-assistant": { "command": "uvx", "args": ["arize-tracing-assistant@latest"] }
