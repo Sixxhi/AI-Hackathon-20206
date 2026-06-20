@@ -63,8 +63,12 @@ ARIZE_SPACE_ID = os.getenv("ARIZE_SPACE_ID", "")
 ARIZE_PROJECT_NAME = os.getenv("ARIZE_PROJECT_NAME", "immune")
 
 # feature flags — flip on as each lane lands its integration
+# IMMUNE_LIVE=1 is required to activate any LLM/network calls so tests always
+# run in deterministic mock mode regardless of what keys are in .env.
+_LIVE = os.getenv("IMMUNE_LIVE", "").lower() in ("1", "true", "yes")
 USE_REDIS = bool(REDIS_URL)
-USE_LLM = bool(LLM_API_KEY)              # provider-agnostic: any LLM configured
-USE_CLAUDE = LLM_PROVIDER == "anthropic" and bool(ANTHROPIC_API_KEY)
+USE_LLM = _LIVE and bool(LLM_API_KEY)
+USE_CLAUDE = _LIVE and LLM_PROVIDER == "anthropic" and bool(ANTHROPIC_API_KEY)
 USE_SENTRY = bool(SENTRY_DSN)
 USE_ARIZE = bool(ARIZE_API_KEY and ARIZE_SPACE_ID)
+USE_PHOENIX = bool(PHOENIX_ENDPOINT)
