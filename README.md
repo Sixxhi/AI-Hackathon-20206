@@ -1,0 +1,65 @@
+# 🧬 IMMUNE — a self-healing immune system for agent memory
+
+Agents poison their own memory and compound the error. IMMUNE **detects the
+culprit by counterfactual replay** (not a fallible LLM judge), **quarantines**
+it, and **paroles** it only when offline re-trial proves it's safe — so the
+agent improves instead of locking in false beliefs.
+
+> *"We don't ask a model who's to blame — we replay the failure with each memory
+> removed, quarantine the one that empirically caused it, and release it only
+> when offline re-trial against logged failures proves it's safe."*
+
+## Run (zero deps, zero API keys)
+
+```bash
+make setup               # uv sync (one-time)
+make demo                # side-by-side: naive vs IMMUNE on the same self-poison
+make test                # invariants lock the moat
+```
+
+Demo output: naive agent scores 1/2 (poison wins via recency), IMMUNE heals to
+2/2, the poison ends **quarantined**, then **paroled** once truth changes.
+
+## The moat (`immune/replay.py`)
+
+Attribution and parole are ONE engine — offline counterfactual replay against
+logged failed turns. This is the part nobody bothers to build:
+
+- **Attribution by ablation** — remove a memory, replay the failure, did it flip
+  to correct? Empirical culprit, no judge in the blame path. Catches single +
+  pairwise (interaction) culprits.
+- **Confidence-gated** — clean counterfactual → quarantine; ambiguous →
+  soft-decay only (anti-autoimmune; we don't nuke memories on a guess).
+- **Parole** — re-admit a quarantined memory and replay its failures *offline*.
+  Release only if it no longer reproduces them. Never re-tests on live traffic.
+
+## Architecture
+
+```
+write  →  ImmuneMemory.add()     provenance + initial trust      (immune/store.py)
+read   →  ImmuneMemory.search()  admission gate + log admitted    (immune/store.py)
+fail   →  ShadowReplay.handle_failure()  ablation → quarantine    (immune/replay.py) ★
+heal   →  ShadowReplay.parole()  offline re-trial → release       (immune/replay.py) ★
+```
+
+## Team lanes → files
+
+| Lane | Owner | Files | Swap for v2 |
+|------|-------|-------|-------------|
+| Shadow-replay moat | P1 | `replay.py` | (keep — this is the wedge) |
+| Memory + infra | P2 | `store.py`, `schemas.py` | in-memory → **Redis** vector search; add Sentry on quarantine |
+| Agent + poison + eval | P3 | `agent.py`, `scenario.py` | mock agent → **Claude**; benchmark → **Arize Phoenix** |
+| Frontend + demo | P4 | (new `dashboard/`) | read `store.snapshot()` + `replay.failed_log` → trust chart + side-by-side |
+
+## Honest limits (say these before judges ask)
+
+- Replay only works on **reproducible** failures (deterministic benchmark). Live
+  state-dependent failures won't replay — that's the boundary.
+- `false-quarantine-rate` is an **eval metric on our benchmark**, not a prod
+  dashboard (it needs ground truth).
+- Attribution catches single + pairwise culprits, not arbitrary combinations.
+
+## Status: v1 complete
+
+End-to-end loop runs offline and deterministic. All 7 invariants pass. Next:
+P2 swaps Redis, P3 swaps Claude + Arize, P4 builds the dashboard.

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "immune"
+version = "0.1.0"
+description = "Self-healing immune system for agent memory (shadow-replay attribution + parole)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []                      # v1 core is pure stdlib
+
+[project.optional-dependencies]
+# per-lane extras:  uv sync --extra infra   /   --extra agent   /   --all-extras
+infra = ["redis>=5.0", "sentry-sdk>=2.0"]          # P2: memory + alerting
+agent = ["anthropic>=0.40", "arize-phoenix>=5.0"]  # P3: real agent + eval
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "python-dotenv>=1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
