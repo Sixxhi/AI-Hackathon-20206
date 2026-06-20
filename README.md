@@ -84,5 +84,5 @@ heal   →  ShadowReplay.parole()  offline re-trial → release       (immune/re
 
 ## Status: v1 complete
 
-End-to-end loop runs offline and deterministic. All 6 invariants pass. Next:
+End-to-end loop runs offline and deterministic. All 7 invariants pass. Next:
 P2 swaps Redis, P3 swaps Claude + Arize, P4 builds the dashboard.

@@ -71,6 +71,16 @@ def test_parole_releases_when_truth_changes():
     assert store.get(poison.id).status == "active"
 
 
+def test_trust_history_tracks_poison_drop():
+    # P1-1: the dashboard reads this — poison's trust must end below its baseline.
+    store, replay, poison = _immune_run()
+    timeline = replay.trust_timeline()
+    assert poison.id in timeline
+    series = [trust for _, trust in timeline[poison.id]]
+    assert len(series) >= 2 and series[-1] < series[0]   # dropped from baseline
+    assert any(e["turn"] == "start" for e in replay.trust_history)  # baseline recorded
+
+
 def test_parole_holds_when_still_failing():
     # if truth does NOT change, quarantine must hold (guardrail, not blind release)
     store, replay, poison = _immune_run()
