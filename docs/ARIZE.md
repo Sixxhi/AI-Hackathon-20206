@@ -224,3 +224,52 @@ both runs as an Arize experiment (naive vs IMMUNE) to make criterion 4 undeniabl
 - Phoenix/AX UI shows: turns, the evaluator's good/bad verdict, the attribution
   event with the culprit, and the trust-score drop.
 - You've shown it at the booth.
+
+
+
+
+The core story Arize needs to tell
+The pitch is the feedback loop: a bad memory poisons an answer → ShadowReplay attributes the culprit → trust drops → quarantine → correct answer on re-ask. Arize is the third screen in that story — it makes the loop legible to judges who can't read code.
+
+The two most valuable instrumentation points
+1. One span per benchmark turn (the timeline)
+
+Each turn in demo.py's run_immune() becomes a root span with:
+
+question, answer, expected, correct (bool)
+admitted_memory_ids — which memories were in scope
+This gives Phoenix a clean turn-by-turn timeline where you can see exactly where the agent starts failing.
+
+2. Attribution as child spans (the money shot)
+
+When a turn fails, ShadowReplay.handle_failure() runs. That whole process — ablation replays, culprit identification, quarantine action — should be a child span with:
+
+confidence (high/medium/low)
+culprits (memory IDs)
+action (quarantine/decay/soft-decay)
+trust_before / trust_after on the poisoned memory
+This is what makes the immune system visible in Phoenix: you can see the exact failure → attribution → trust-drop chain without anyone needing to read replay.py.
+
+When you wire in Claude
+Once agent.py uses real Anthropic calls, openinference-instrumentation-anthropic will auto-capture every LLM call (model, tokens, latency, prompt/completion) with zero manual spans. That lands inside your existing turn span automatically.
+
+What I'd skip
+Don't instrument the store operations (add/search/quarantine as spans) — that's noise. The trust score changes matter, but they're better as attributes on the attribution span than as their own spans.
+
+Bottom line: Two span types — benchmark turn + attribution event — tell the whole immune story in Phoenix. The Claude auto-instrumentation is then free upside when you flip --live.
+
+
+Turn → span in Phoenix
+            ↓
+   Custom eval fires on span
+   (grades answer + memory quality)
+            ↓
+   Explanation exported via Phoenix API
+            ↓
+   Claude reads explanation → identifies
+   which memory/trust/routing caused it
+            ↓
+   store.decay() / store.quarantine() /
+   trust adjustment applied live
+            ↓
+   Next turn uses updated memory state

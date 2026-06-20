@@ -23,10 +23,29 @@ class ShadowReplay:
         self.agent = Agent(store)
         self.max_subset = max_subset          # singles + pairs (interaction effects)
         self.failed_log: list[TurnLog] = []   # ground-truth-bearing failures to replay against
+        self.trust_history: list[dict] = []   # P1-1: trust snapshots per event (for the dashboard)
+        self._record("start")                 # baseline before any failure
+
+    # --- P1-1: trust history for the dashboard --------------------------------
+    def _record(self, turn) -> None:
+        """Snapshot every memory's trust at this point in the run."""
+        self.trust_history.append({"turn": turn, "snapshot": self.store.snapshot()})
+
+    def trust_timeline(self) -> dict:
+        """Reshape trust_history into {mem_id: [(turn, trust), ...]} for plotting."""
+        series: dict = {}
+        for entry in self.trust_history:
+            for m in entry["snapshot"]:
+                series.setdefault(m["id"], []).append((entry["turn"], m["trust"]))
+        return series
 
     # --- core: replay one turn under a counterfactual exclusion ---------------
     def replay(self, question: str, expected: str, exclude: tuple[str, ...] = ()) -> bool:
-        ans, _ = self.agent.answer(question, exclude=exclude)
+        # Attribution must be DETERMINISTIC: always replay with the mock backend,
+        # never the live LLM — even in IMMUNE_LIVE mode. A nondeterministic answer
+        # here would make the culprit set flicker and put a model in the blame path
+        # (the exact thing this engine exists to avoid). See ARCHITECTURE.md.
+        ans, _ = self.agent._answer_mock(question, exclude)
         return score(ans, expected)
 
     # --- attribution by ablation (not by a fallible judge) --------------------
@@ -67,6 +86,7 @@ class ShadowReplay:
             for mid in turn.admitted_ids:
                 self.store.decay(mid, alpha=0.15)
             action["action"] = "soft-decay"
+        self._record(turn.id)                  # P1-1: snapshot trust after this failure
         return action
 
     # --- parole: offline re-trial, same engine -------------------------------
@@ -87,4 +107,6 @@ class ShadowReplay:
             else:
                 self.store.parole(m.id)                       # release — proven safe
                 paroled.append(m.id)
+        if paroled:
+            self._record("parole")             # P1-1: snapshot after releases
         return paroled

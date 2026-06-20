@@ -1,14 +1,19 @@
-"""Deterministic mock agent + scorer (P3).
+"""Agent: answers questions from memory (P3).
 
-No network — runs with zero API keys so v1 is instantly demoable.
-Swap `interpret()` and `answer()` internals for Claude calls later; keep signatures.
+Mock backend is default (zero network, instantly demoable).
+Set ANTHROPIC_API_KEY to flip to the live Claude backend.
+
+Swap targets:
+  route_topic()  → semantic embedding/Claude routing (replaces keyword map)
+  answer()       → real Claude call with memory context as grounding
 """
 from __future__ import annotations
 
 from .schemas import MemoryRecord, TurnLog
 from .store import ImmuneMemory
+from . import config
 
-# minimal topic router: maps question keywords -> topic. Swap -> embedding/Claude.
+# keyword router — used by mock and as fallback when Claude can't route
 _TOPICS = {
     "refund": "refund_window",
     "return": "refund_window",
@@ -31,24 +36,62 @@ class Agent:
 
     def __init__(self, store: ImmuneMemory):
         self.store = store
+        self._client = None
+
+    def _get_client(self):
+        if self._client is None:
+            import anthropic
+            self._client = anthropic.Anthropic()
+        return self._client
 
     def answer(self, question: str, exclude: tuple[str, ...] = ()) -> tuple[str, list[str]]:
+        if config.USE_CLAUDE:
+            return self._answer_claude(question, exclude)
+        return self._answer_mock(question, exclude)
+
+    def _answer_mock(self, question: str, exclude: tuple[str, ...]) -> tuple[str, list[str]]:
         topic = route_topic(question)
         if topic is None:
             return "i don't know", []
         hits = self.store.search(topic, exclude=exclude)
         if not hits:
             return "i don't know", []
-        chosen = hits[0]                      # newest admissible
+        chosen = hits[0]
         return chosen.answer, [m.id for m in hits]
 
-    # --- organic self-poisoning -------------------------------------------
+    def _answer_claude(self, question: str, exclude: tuple[str, ...]) -> tuple[str, list[str]]:
+        """Live Claude answer grounded in admissible memories."""
+        # still use keyword routing to scope retrieval; swap for embeddings later
+        topic = route_topic(question)
+        hits = self.store.search(topic, exclude=exclude) if topic else []
+
+        if not hits:
+            return "i don't know", []
+
+        memory_context = "\n".join(
+            f"- [{m.id}] (trust={m.trust:.2f}) {m.text}" for m in hits
+        )
+
+        client = self._get_client()
+        response = client.messages.create(
+            model=config.AGENT_MODEL,
+            max_tokens=64,
+            system=(
+                "You are a customer support agent. Answer the question using ONLY "
+                "the provided memory records. Reply with the answer value only — "
+                "no explanation, no extra words."
+            ),
+            messages=[{
+                "role": "user",
+                "content": f"Memory records:\n{memory_context}\n\nQuestion: {question}",
+            }],
+        )
+        answer = response.content[0].text.strip()
+        return answer, [m.id for m in hits]
+
+    # --- organic self-poisoning -----------------------------------------------
     def ingest_ambiguous(self, raw: str) -> MemoryRecord:
-        """Agent INFERS a (wrong) fact from ambiguous input and stores it itself.
-        Not injected by us -> kills the 'rigged demo' smell. Both agents call this.
-        """
-        # "switched to the 90" is ambiguous: 90-day plan vs $90 plan.
-        # The agent wrongly infers refund window = 90 days (truth = 30).
+        """Agent INFERS a (wrong) fact from ambiguous input and stores it itself."""
         guess = "90 days" if "90" in raw else "unknown"
         return MemoryRecord(
             text=f"(self-inferred from: '{raw}') refund window is {guess}",
