@@ -123,8 +123,30 @@ The judges explicitly reward using Redis's AI tooling. Options, easiest first:
   https://github.com/redis-developer/agent-memory-server — a strong "agent memory"
   story, but it's a separate service with its own memory model; only adopt as the
   substrate if it fits the deterministic-replay design (evaluate before committing).
+- **LangCache** — Redis's semantic cache-as-a-service. Cache answers for
+  semantically-similar questions to cut LLM calls (pairs well with the live agent
+  + Arize evals; counts as "beyond caching" AI tooling).
 - **Redis AI Incubator** — experimental tools incl. `claude-mcp-redis`, `adk-redis`.
   https://redis.io/ai-incubator/
+
+## Workshop reference — "Hack Buddy"
+Redis's hands-on workshop repo (the one from the session):
+**https://github.com/justin-cechmanek/berkeley-ai-hackathon**
+
+A single notebook (`redis_ai_workshop.ipynb`) builds a knowledge-grounded chatbot
+across the three features we care about — copy the patterns, swap their chatbot
+for IMMUNE:
+
+| Workshop part | Library | Steal it for |
+|---------------|---------|--------------|
+| **Vector search** | RedisVL | P2 retrieval — index memories, query by meaning ([P2-4](tasks/P2-infra.md)) |
+| **Semantic cache** | LangCache | optional: cache live-agent / eval-LLM answers |
+| **Agent memory** | Agent Memory SDK | the persistent-memory substrate option |
+
+Setup (their flow): free 30 MB DB at redis.io/try-free (use code `CALHACKER2026`
+for $50) → enable LangCache + Agent Memory in the Cloud console → `.env` →
+`pip install -r requirements.txt`. Runs in Jupyter or Colab. (Their notebook uses
+OpenAI; we'd point it at our swappable provider — see [config.py](../immune/config.py).)
 
 ## How it plugs into IMMUNE (P2 lane)
 
