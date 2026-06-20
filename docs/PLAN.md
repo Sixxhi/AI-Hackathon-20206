@@ -65,7 +65,7 @@ Everyone else starts immediately, in parallel.
   the mock stays default.
 - Arize Phoenix: instrument the benchmark — one span per turn + an attribution
   event (failure → culprit → trust drop). Run the **local Phoenix UI** so there's
-  no network risk at judging.
+  no network risk at judging. Full runbook + workshop code: [ARIZE.md](ARIZE.md).
 - ⚠️ **Claude must never sit in the replay path** — keep the grader deterministic.
 - **Done:** offline `make demo` unchanged; `--live` uses Claude; Phoenix UI shows
   the feedback loop.
