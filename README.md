@@ -25,6 +25,7 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 
 - [docs/CONCEPT.md](docs/CONCEPT.md) — the full idea, problem, demo story, scope, and track/sponsor fit.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, data flow, the ablation engine, and the v2 swap seams.
+- [docs/PLAN.md](docs/PLAN.md) — the 4-person parallel build plan: ownership, dependencies, timeline.
 - [TEAM.md](TEAM.md) — onboarding and per-lane ownership.
 
 ## Run (zero deps, zero API keys)
