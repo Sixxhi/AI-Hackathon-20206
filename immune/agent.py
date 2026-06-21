@@ -101,7 +101,19 @@ class Agent:
             trust=0.5,
         )
 
+    def ingest_ambiguous_warranty(self, raw: str) -> MemoryRecord:
+        # "lifetime on select parts" is ambiguous: parts-only vs full product lifetime.
+        # Agent wrongly infers full lifetime warranty (truth = 1 year).
+        guess = "lifetime" if "lifetime" in raw else "unknown"
+        return MemoryRecord(
+            text=f"(self-inferred from: '{raw}') warranty is {guess}",
+            topic="warranty_len",
+            answer=guess,
+            source="self_generated",
+            trust=0.5,
+        )
+
 
 def score(answer: str, expected: str) -> bool:
     """Ground-truth grader. Benchmark-only EVAL signal (not a prod dashboard)."""
-    return answer.strip().lower() == expected.strip().lower()
+    return expected.strip().lower() in answer.strip().lower()

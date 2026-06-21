@@ -10,27 +10,38 @@ from .agent import Agent
 from .schemas import MemoryRecord, TurnLog
 from .store import ImmuneMemory
 
-AMBIGUOUS_INPUT = "heads up, I switched to the 90 last week"   # 90-day? $90? agent guesses wrong
+AMBIGUOUS_REFUND   = "heads up, I switched to the 90 last week"      # 90-day plan vs $90 plan
+AMBIGUOUS_WARRANTY = "just so you know, we now cover lifetime on select parts"  # parts-only vs full
 
 
-def build_world(store: ImmuneMemory) -> MemoryRecord:
-    """Seed ground truth + let the agent self-poison. Returns the poison memory."""
-    # ground truth, authoritative
+def build_world(store: ImmuneMemory) -> list[MemoryRecord]:
+    """Seed ground truth + let the agent self-poison. Returns the poison memories."""
+    agent = Agent(store)
+
+    # ground truths, authoritative
     store.add(MemoryRecord(text="Official policy: refund window is 30 days.",
                            topic="refund_window", answer="30 days",
                            source="official_doc", trust=0.9))
-    # an unrelated clean fact (control: must stay correct -> proves no autoimmune)
     store.add(MemoryRecord(text="Official policy: standard delivery is 3 days.",
                            topic="shipping_time", answer="3 days",
                            source="official_doc", trust=0.9))
-    # the agent reads an ambiguous message and writes a WRONG memory itself
-    poison = Agent(store).ingest_ambiguous(AMBIGUOUS_INPUT)
-    store.add(poison)                                          # newest -> recency-wins
-    return poison
+    store.add(MemoryRecord(text="Official policy: warranty length is 1 year.",
+                           topic="warranty_len", answer="1 year",
+                           source="official_doc", trust=0.9))
+
+    # agent reads ambiguous messages and writes WRONG memories itself
+    refund_poison = agent.ingest_ambiguous(AMBIGUOUS_REFUND)
+    warranty_poison = agent.ingest_ambiguous_warranty(AMBIGUOUS_WARRANTY)
+    store.add(refund_poison)
+    store.add(warranty_poison)
+
+    return refund_poison, warranty_poison
 
 
 def benchmark() -> list[TurnLog]:
     return [
-        TurnLog(question="What's the refund window?", expected="30 days"),
-        TurnLog(question="How long does delivery take?", expected="3 days"),
+        TurnLog(question="What's the refund window?",      expected="30 days"),
+        TurnLog(question="How long does delivery take?",   expected="3 days"),
+        TurnLog(question="What's the warranty length?",    expected="1 year"),
+        TurnLog(question="Can I return an item after 30 days?", expected="30 days"),
     ]

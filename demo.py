@@ -87,7 +87,7 @@ def run_immune(tracer, eval_loop):
     store = ImmuneMemory(gate=True, threshold=0.3)
     if eval_loop:
         eval_loop.store = store
-    poison = scenario.build_world(store)
+    poisons = list(scenario.build_world(store))
     agent, replay = Agent(store), ShadowReplay(store)
     rows, events = [], []
 
@@ -146,7 +146,7 @@ def run_immune(tracer, eval_loop):
             rows.append((turn.question, turn.answer, turn.expected,
                          turn.correct, healed, eval_summary))
 
-    return store, replay, rows, events, poison
+    return store, replay, rows, events, poisons
 
 
 def main():
@@ -176,7 +176,7 @@ def main():
     _pause()
 
     _bar("PHASE 2 — IMMUNE agent  (shadow-replay self-healing)", GREEN)
-    store, replay, rows, events, poison = run_immune(tracer, eval_loop)
+    store, replay, rows, events, poisons = run_immune(tracer, eval_loop)
     i_ok = 0
     for q, ans, exp, ok, healed, eval_summary in rows:
         i_ok += ok
@@ -235,27 +235,30 @@ def main():
         topic="refund_window", answer="90 days",
         source="official_doc", trust=0.9
     ))
+    poison_ids = {p.id for p in poisons}
     for t in replay.failed_log:
-        if poison.id in t.admitted_ids:
+        if any(pid in t.admitted_ids for pid in poison_ids):
             t.expected = "90 days"
     released = replay.parole()
-    if poison.id in released:
-        print(f"  {yellow('Re-trial of quarantined')} {poison.id}:")
-        print(f"  Replayed logged failures with memory re-admitted...")
-        print(f"  Result: {green('NO LONGER FAILS')}")
-        print()
+    paroled = [pid for pid in poison_ids if pid in released]
+    if paroled:
+        for pid in paroled:
+            print(f"  {yellow('Re-trial of quarantined')} {pid}:")
+            print(f"  Replayed logged failures with memory re-admitted...")
+            print(f"  Result: {green('NO LONGER FAILS')}")
+            print()
         print(f"  {bold(green('→ PAROLED.'))} Quarantine is not a life sentence.")
     else:
-        print(f"  Memory still reproduces failures → {red('stays quarantined')}.")
+        print(f"  Memories still reproduce failures → {red('stay quarantined')}.")
         print(f"  {dim('(guardrail held)')}")
-    print(f"\n  Final status of once-poison memory: "
-          f"{bold(store.get(poison.id).status)}")
+    print(f"\n  Final status of poison memories: "
+          + ", ".join(f"{bold(store.get(pid).status)}" for pid in poison_ids))
 
     elapsed = time.time() - t_start
     _bar("RESULTS", CYAN)
     print()
-    print(f"  Naive agent   {red('1/2')}   poison won, mistake repeated")
-    print(f"  IMMUNE agent  {green('2/2')}   culprit quarantined, never repeated")
+    print(f"  Naive agent   {red(f'{n_ok}/{len(naive_rows)}')}   poison won, mistake repeated")
+    print(f"  IMMUNE agent  {green(f'{i_ok}/{len(rows)}')}   culprit quarantined, never repeated")
     print()
     print(f"  {bold('The longer IMMUNE runs, the healthier its memory becomes.')}")
     print()
