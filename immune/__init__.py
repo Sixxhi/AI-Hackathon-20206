@@ -7,7 +7,12 @@ from .schemas import MemoryRecord, TurnLog
 from .store import ImmuneMemory
 from .agent import Agent, score
 from .replay import ShadowReplay
-from . import scenario
+from .attribution import Attributor
+from .provenance import ProvenanceGraph
+from .detectors import ContradictionDetector, SelfConsistencyDetector, Suspicion
+from . import scenario, redteam, embed
 
 __all__ = ["MemoryRecord", "TurnLog", "ImmuneMemory", "Agent", "score",
-           "ShadowReplay", "scenario"]
+           "ShadowReplay", "Attributor", "ProvenanceGraph",
+           "ContradictionDetector", "SelfConsistencyDetector", "Suspicion",
+           "scenario", "redteam", "embed"]

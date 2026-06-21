@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Self-healing immune system for agent memory (shadow-replay attribution + parole)"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []                      # v1 core is pure stdlib
+dependencies = []                      # core is pure stdlib (incl. embeddings + attribution)
+
+[project.scripts]
+immune = "immune.cli:main"
 
 [project.optional-dependencies]
 # per-lane extras:  uv sync --extra infra   /   --extra agent   /   --all-extras

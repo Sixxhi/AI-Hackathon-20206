@@ -10,9 +10,8 @@ wrong'); no live re-test (kills 're-poison to find out it's poison').
 """
 from __future__ import annotations
 
-from itertools import combinations
-
 from .agent import Agent, score
+from .attribution import Attributor
 from .schemas import TurnLog
 from .store import ImmuneMemory
 
@@ -21,10 +20,21 @@ class ShadowReplay:
     def __init__(self, store: ImmuneMemory, max_subset: int = 2):
         self.store = store
         self.agent = Agent(store)
-        self.max_subset = max_subset          # singles + pairs (interaction effects)
+        self.max_subset = max_subset          # back-compat (group testing has no fixed cap)
         self.failed_log: list[TurnLog] = []   # ground-truth-bearing failures to replay against
         self.trust_history: list[dict] = []   # P1-1: trust snapshots per event (for the dashboard)
+        self.last_replays = 0                 # replays the last attribution cost (instrumentation)
         self._record("start")                 # baseline before any failure
+
+    def _suspicion_key(self, mid: str):
+        """LOWER = more suspect, tested for removal first. Untrusted source, low
+        trust, and recency all raise suspicion. Order only affects speed/choice
+        among equally-minimal sets — never correctness (ddmin is 1-minimal)."""
+        m = self.store.get(mid)
+        if m is None:
+            return (0, 0.0, 0)
+        trusted_source = 1 if m.source == "official_doc" else 0
+        return (trusted_source, m.trust, -m.seq)
 
     # --- P1-1: trust history for the dashboard --------------------------------
     def _record(self, turn) -> None:
@@ -48,21 +58,23 @@ class ShadowReplay:
         ans, _ = self.agent._answer_mock(question, exclude)
         return score(ans, expected)
 
-    # --- attribution by ablation (not by a fallible judge) --------------------
+    # --- attribution by adaptive group testing (not by a fallible judge) ------
     def attribute(self, turn: TurnLog) -> tuple[list[str], str]:
-        """Return (culprit_ids, confidence). confidence in {high, medium, low}."""
-        admitted = turn.admitted_ids
-        # singles: a removal that flips fail->pass is an empirical culprit
-        singles = [mid for mid in admitted
-                   if self.replay(turn.question, turn.expected, exclude=(mid,))]
-        if singles:
-            return singles, "high"
-        # pairs: interaction effects (two innocent-looking memories combine wrong)
-        for r in range(2, self.max_subset + 1):
-            for combo in combinations(admitted, r):
-                if self.replay(turn.question, turn.expected, exclude=combo):
-                    return list(combo), "medium"
-        return [], "low"   # ambiguous -> do NOT quarantine
+        """Return (culprit_ids, confidence) via the group-testing Attributor.
+
+        Finds the MINIMAL set of memories whose removal flips fail->pass: a
+        single culprit (high), a redundant/interacting set (medium), or nothing
+        memory-attributable (low). Beats fixed singles+pairs against k-redundant
+        poison and costs O(D log N) replays. Still no model in the blame path —
+        the only call is the deterministic replay below.
+        """
+        attributor = Attributor(
+            replay_fn=lambda excl: self.replay(turn.question, turn.expected, exclude=tuple(excl)),
+            suspicion_key=self._suspicion_key,
+        )
+        culprits, conf = attributor.attribute(turn.admitted_ids)
+        self.last_replays = attributor.replays
+        return culprits, conf
 
     # --- failure handling: confidence-gated ----------------------------------
     def handle_failure(self, turn: TurnLog) -> dict:
@@ -70,17 +82,18 @@ class ShadowReplay:
         self.failed_log.append(turn)
         action: dict = {"turn": turn.id, "confidence": conf, "culprits": culprits}
 
-        if conf == "high":
+        if conf in ("high", "medium"):
+            # The Attributor proved this set is minimal — every member is needed
+            # to flip the failure, so every member is a genuine culprit. Quarantine
+            # all of them, and cascade to anything derived from each (contamination
+            # subtree). This is what beats k-redundant poison: all copies fall.
+            quarantined: list[str] = []
             for mid in culprits:
-                self.store.quarantine(mid)
+                quarantined += self.store.quarantine_cascade(mid)
             action["action"] = "quarantine"
-        elif conf == "medium":
-            # combine-wrong: quarantine the self-generated/lowest-trust one, decay rest
-            ranked = sorted(culprits, key=lambda mid: self.store.get(mid).trust)
-            self.store.quarantine(ranked[0])
-            for mid in ranked[1:]:
-                self.store.decay(mid, alpha=0.3)
-            action["action"] = "quarantine+decay"
+            action["quarantined"] = sorted(set(quarantined))
+            action["cascade"] = sorted(set(quarantined) - set(culprits))
+            action["replays"] = self.last_replays
         else:
             # ambiguous: soft-decay only, quarantine nothing (anti-autoimmune)
             for mid in turn.admitted_ids:
