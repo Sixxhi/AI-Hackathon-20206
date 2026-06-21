@@ -61,7 +61,13 @@ def _canon(s: str) -> str:
     """NFKC (fullwidth→ascii), lowercase, keep $ . @ ' , map word-numbers + units."""
     s = unicodedata.normalize("NFKC", s).strip().lower()
     s = re.sub(r"[^a-z0-9@.$'\s]", " ", s)
-    return " ".join(_UNITS.get(_WORDS.get(w, w), _WORDS.get(w, w)) for w in s.split())
+    out = []
+    for w in s.split():
+        w = w.strip(".,;:!?")                      # 'days.' -> 'days' (keeps '$30.00', emails)
+        if not w:
+            continue
+        out.append(_UNITS.get(_WORDS.get(w, w), _WORDS.get(w, w)))
+    return " ".join(out)
 
 
 def _values(canon: str) -> set:

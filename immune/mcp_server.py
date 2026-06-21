@@ -1,7 +1,7 @@
 """IMMUNE as an MCP server — plug self-healing memory into ANY MCP agent
 (Claude Code, Claude Desktop, etc.).
 
-The agent uses IMMUNE as its long-term memory through four tools:
+The agent uses IMMUNE as its long-term memory through these tools:
 
   immune_remember(text, source)  -> store a fact (provenance + initial trust)
   immune_recall(query)           -> retrieve facts to ground an answer. Quarantined
@@ -40,6 +40,7 @@ from .store import ImmuneMemory
 _HOME = os.path.expanduser(os.getenv("IMMUNE_HOME", "~/.immune"))
 _RECORD_PATH = os.getenv("IMMUNE_RECORD_PATH", os.path.join(_HOME, "record.jsonl"))
 _STORE_PATH = os.getenv("IMMUNE_STORE_PATH", os.path.join(_HOME, "store.json"))
+_FAILED_PATH = os.getenv("IMMUNE_FAILED_PATH", os.path.join(_HOME, "failed.json"))
 
 
 def _demo_seed_enabled() -> bool:
@@ -62,6 +63,21 @@ class Engine:
                 chat.seed(self.store)
         self._load_official()                      # operator system-of-record (out-of-band)
         self.detector = ContradictionDetector(self.store)
+        self.failed = self._load_failed()          # blamed turns, so parole can re-test them
+
+    def _load_failed(self) -> list:
+        try:
+            return json.load(open(_FAILED_PATH)) if os.path.exists(_FAILED_PATH) else []
+        except Exception:
+            return []
+
+    def _save_failed(self) -> None:
+        try:
+            os.makedirs(os.path.dirname(_FAILED_PATH) or ".", exist_ok=True)
+            with open(_FAILED_PATH, "w") as f:
+                json.dump(self.failed, f)
+        except Exception:
+            pass
 
     def _load_official(self) -> None:
         """Register the operator's system-of-record from IMMUNE_OFFICIAL_PATH — a JSON
@@ -159,6 +175,9 @@ class Engine:
                 for mid in culprits:
                     taken += self.store.quarantine_cascade(mid)
                 self._save()
+                self.failed.append({"query": query, "expected": flag.expected,
+                                    "culprits": sorted(set(taken))})
+                self._save_failed()               # so parole can re-test this later
                 result.update(culprits=culprits, quarantined=sorted(set(taken)),
                               healed_answer=chat._mock_answer(self.store, query))
             else:
@@ -171,6 +190,36 @@ class Engine:
                                   "nothing quarantined or overridden")
         self._record("check", {"query": query, "answer": answer, **result})
         return result
+
+    def parole(self) -> dict:
+        """Re-trial: for each quarantined memory, re-admit it and re-test its blamed
+        queries against the CURRENT system-of-record. Release ONLY if it no longer
+        contradicts (e.g. the operator updated the truth so the memory is now right).
+        Safe to expose — an attacker can't force release: the re-test uses the
+        trusted anchor they can't forge, and the blame path stays deterministic."""
+        released: list[str] = []
+        for m in self.store.quarantined():
+            blamed = [f for f in self.failed if m.id in f.get("culprits", [])]
+            if not blamed:
+                continue
+            # Ranking-independent re-test: does THIS memory's own claim still
+            # contradict the current system-of-record? (If the operator updated the
+            # truth so the memory now agrees, it's safe to release.)
+            still_bad = any(
+                bool(self.detector.check(m.answer,
+                                         [x.id for x in chat.retrieve(self.store, f["query"])]))
+                for f in blamed)
+            if not still_bad:
+                self.store.parole(m.id)
+                released.append(m.id)
+        if released:
+            self.failed = [f for f in self.failed
+                           if not set(f.get("culprits", [])) & set(released)]
+            self._save(); self._save_failed()
+        out = {"released": released,
+               "still_quarantined": [m.id for m in self.store.quarantined()]}
+        self._record("parole", out)
+        return out
 
     def status(self) -> dict:
         snap = self.store.snapshot()
@@ -209,6 +258,14 @@ def build_server():
         """Show current memory: active vs quarantined, with trust scores."""
         return engine.status()
 
+    @mcp.tool()
+    def immune_parole() -> dict:
+        """Re-trial quarantined memories against the CURRENT system-of-record and
+        release any that no longer contradict it (e.g. the official policy was
+        updated so a once-wrong memory is now right). Safe: release is gated by a
+        deterministic re-test against the trusted anchor — it can't be gamed."""
+        return engine.parole()
+
     # NOTE: there is deliberately NO register-official TOOL. Trust must not be
     # agent-assertable, and the agent fills every tool argument — so any token
     # passed as a tool arg would have to live in the agent's context, where a
@@ -216,7 +273,7 @@ def build_server():
     # the audit log. The system-of-record is configured ONLY out-of-band, through
     # channels the agent never mediates: the IMMUNE_OFFICIAL_PATH startup file, or
     # the `immune register-official` admin CLI (writes IMMUNE_STORE_PATH). The agent
-    # sees exactly four tools: remember / recall / check / status.
+    # sees only the agent tools (remember/recall/check/status/parole) — never a trust-config tool.
     return mcp
 
 

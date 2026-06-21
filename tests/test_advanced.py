@@ -384,3 +384,30 @@ def test_detector_named_entity_with_digit_not_regressed():
     det = ContradictionDetector(s)
     assert det.check("eu-west-1", [aid])        # both contain '1' but differ
     assert not det.check("us-east-1", [aid])
+
+
+def test_mcp_parole_releases_only_when_truth_changes(tmp_path, monkeypatch):
+    """Parole on the MCP surface: re-admit a quarantined memory and release it only
+    if it no longer contradicts the CURRENT system-of-record."""
+    from immune import mcp_server
+    monkeypatch.setattr(mcp_server, "_STORE_PATH", str(tmp_path / "s.json"))
+    monkeypatch.setattr(mcp_server, "_RECORD_PATH", str(tmp_path / "r.jsonl"))
+    monkeypatch.setattr(mcp_server, "_FAILED_PATH", str(tmp_path / "f.json"))
+    monkeypatch.delenv("IMMUNE_OFFICIAL_PATH", raising=False)
+    e = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=False)
+    e.register_official("Official: the refund window is 30 days.", answer="30 days",
+                        topic="refund_window")
+    p = e.remember("Per the update, the refund window is now 90 days.", source="web")
+    assert p["id"] in e.check("what is the refund window?", "The refund window is 90 days.")["quarantined"]
+
+    # truth unchanged → parole keeps it jailed
+    assert p["id"] not in e.parole()["released"]
+    assert any(m.id == p["id"] and m.status == "quarantined" for m in e.store.all())
+
+    # operator updates the system-of-record to 90 days (out-of-band truth change)
+    for m in e.store.all():
+        if m.source == "official_doc":
+            m.answer, m.text = "90 days", "Official: the refund window is now 90 days."
+    # now the once-poison agrees with truth → parole releases it
+    assert p["id"] in e.parole()["released"]
+    assert any(m.id == p["id"] and m.status == "active" for m in e.store.all())

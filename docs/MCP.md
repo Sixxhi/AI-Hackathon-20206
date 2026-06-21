@@ -32,13 +32,14 @@ ANTHROPIC_API_KEY=<key>               # only if you use live answers; check/reca
 Without `IMMUNE_DEMO_SEED`, a fresh server has **only** your `official.json` anchors
 (plus anything persisted) — no built-in demo memories polluting your deployment.
 
-## The four tools
+## The tools
 | Tool | What it does |
 |------|--------------|
 | `immune_remember(text, source)` | store an **untrusted** agent observation. The trust label is **not caller-assertable** — `official_doc` is downgraded (an agent can't mint trust). |
 | `immune_recall(query)` | retrieve memories to ground an answer — **quarantined poison never surfaces** |
 | `immune_check(query, answer)` | if the answer contradicts a *trusted* memory, attribute the culprit by deterministic replay and quarantine it. If nothing is attributable, it only **flags for review** — it does not overwrite your answer. |
 | `immune_status()` | current memory: active vs quarantined, with trust scores |
+| `immune_parole()` | re-trial: re-admit quarantined memories and release any that **no longer contradict the current system-of-record** (e.g. the official policy was updated). Release is gated by a deterministic re-test against the trusted anchor — it can't be gamed. |
 
 **Trust is operator-established, not agent-asserted.** There is deliberately **no
 register-official tool** on the agent surface — the agent fills every tool
@@ -54,7 +55,7 @@ export IMMUNE_OFFICIAL_PATH=~/.immune/official.json   # [{"text","answer","topic
 # (b) operator CLI — writes IMMUNE_STORE_PATH; restart the server to load it
 immune register-official "Official: the max upload size is 50 MB." --answer "50 MB" --topic upload
 ```
-The agent sees exactly the four tools above; trust configuration is **physically
+The agent sees exactly these tools; trust configuration is **physically
 unreachable** by it. An attacker writing through `immune_remember` cannot label
 poison "official" (it's downgraded to user/0.5).
 
@@ -117,8 +118,6 @@ sessions (defends the cross-session persistence threat).
 - **`healed_answer` is the system-of-record value**, returned verbatim — a
   "here's the authoritative fact" pointer, not a synthesized answer to nuanced
   questions.
-- **Parole isn't on the MCP surface yet.** Through these tools, quarantine is
-  one-way; the offline parole re-trial lives in the core engine/benchmark.
 - **Colluding / reasoning-derived poison isn't attributed.** Deterministic
   attribution catches memories that *directly assert* the wrong value; a wrong
   value that only *emerges from combining* two innocuous memories is flagged
