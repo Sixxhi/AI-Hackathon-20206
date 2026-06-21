@@ -1,4 +1,4 @@
-.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo demo-langgraph demo-agent dashboard up down logs lock clean
+.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo demo-firewall demo-firewall-offline demo-langgraph dashboard up down logs lock clean
 
 setup:          ## sync venv + dev deps (everyone runs this first)
 	uv sync
@@ -32,11 +32,14 @@ test:           ## run invariant tests
 demo:           ## run the side-by-side demo
 	uv run demo.py
 
-demo-langgraph: ## offline deterministic break-and-heal (can't-fail backup)
-	uv run --extra agent python demo_langgraph.py
+demo-firewall:  ## THE demo: Claude agent + Redis memory firewall, poisoned & healed (live)
+	REDIS_URL=$${REDIS_URL:-redis://localhost:6379} IMMUNE_LIVE=1 uv run --extra agent --extra infra python demo_firewall.py
 
-demo-agent:     ## LIVE: real LangGraph+Claude agent poisoned & healed (needs key)
-	IMMUNE_LIVE=1 uv run --extra agent python agent_langgraph.py
+demo-firewall-offline: ## same break-and-heal, deterministic, zero network (backup)
+	uv run python demo_firewall.py
+
+demo-langgraph: ## (secondary) shows ImmuneStore also speaks LangGraph's BaseStore
+	uv run --extra agent python demo_langgraph.py
 
 dashboard:      ## launch the visual dashboard (http://localhost:8501)
 	uv run --extra frontend streamlit run dashboard/app.py
