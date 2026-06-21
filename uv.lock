@@ -1187,6 +1187,9 @@ infra = [
     { name = "redis" },
     { name = "sentry-sdk" },
 ]
+mcp = [
+    { name = "mcp" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1200,12 +1203,13 @@ requires-dist = [
     { name = "arize", marker = "extra == 'agent'", specifier = ">=7.0" },
     { name = "arize-otel", marker = "extra == 'agent'", specifier = ">=0.7" },
     { name = "arize-phoenix", marker = "extra == 'agent'", specifier = ">=5.0" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2" },
     { name = "openinference-instrumentation-anthropic", marker = "extra == 'agent'", specifier = ">=0.1" },
     { name = "redis", marker = "extra == 'infra'", specifier = ">=5.0" },
     { name = "sentry-sdk", marker = "extra == 'infra'", specifier = ">=2.0" },
     { name = "streamlit", marker = "extra == 'frontend'", specifier = ">=1.40" },
 ]
-provides-extras = ["infra", "frontend", "agent"]
+provides-extras = ["infra", "frontend", "mcp", "agent"]
 
 [package.metadata.requires-dev]
 dev = [

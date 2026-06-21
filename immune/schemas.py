@@ -1,4 +1,4 @@
-"""Locked interfaces. Everyone codes against these (hour-0 contract).
+"""Locked interfaces.
 
 Swap targets later:
   MemoryRecord.embedding -> real embedding vector (Redis vector field)
