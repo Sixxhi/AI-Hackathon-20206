@@ -1,8 +1,18 @@
-.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo dashboard lock clean
+.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo dashboard up down logs lock clean
 
 setup:          ## sync venv + dev deps (everyone runs this first)
 	uv sync
 	@echo "ready -> uv run demo.py  (or: source .venv/bin/activate)"
+
+up:             ## start local infra (redis + phoenix) via docker compose
+	docker compose up -d
+	@echo "redis -> localhost:6379   phoenix UI -> http://localhost:6006"
+
+down:           ## stop local infra
+	docker compose down
+
+logs:           ## tail infra logs
+	docker compose logs -f
 
 setup-all:      ## sync every lane's deps
 	uv sync --all-extras

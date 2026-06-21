@@ -1,0 +1,24 @@
+# Local infra for IMMUNE — one command brings up both sponsor services.
+#   make up      # start redis + phoenix
+#   make down    # stop them
+# The app degrades gracefully if these aren't running (offline demo stays green).
+services:
+  redis:
+    image: redis/redis-stack:latest      # includes vector search (RediSearch)
+    container_name: immune-redis
+    ports:
+      - "6379:6379"                       # redis
+      - "8001:8001"                       # RedisInsight UI (optional)
+    volumes:
+      - immune-redis-data:/data           # persists across restarts
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:latest    # local trace UI on :6006
+    container_name: immune-phoenix
+    ports:
+      - "6006:6006"
+    restart: unless-stopped
+
+volumes:
+  immune-redis-data:

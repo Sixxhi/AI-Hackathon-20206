@@ -86,7 +86,12 @@ class Agent:
                 "content": f"Memory records:\n{memory_context}\n\nQuestion: {question}",
             }],
         )
-        answer = response.content[0].text.strip()
+        if response.stop_reason == "refusal":
+            # safety classifier declined — surface, don't crash on empty content
+            return "i don't know", [m.id for m in hits]
+        # content[0] isn't guaranteed to be the text block (thinking can lead);
+        # pick the first text block instead of indexing blindly.
+        answer = next((b.text for b in response.content if b.type == "text"), "").strip()
         return answer, [m.id for m in hits]
 
     # --- organic self-poisoning -----------------------------------------------

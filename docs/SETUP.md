@@ -6,18 +6,24 @@ One place to set up the whole stack. v1 runs with **zero** of the integrations
 ## 0. Prerequisites
 - **uv** (Python package manager): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **git**, and access to the repo (`git@github.com:Sixxhi/AI-Hackathon-20206.git`)
-- **Docker** — only if you want the Redis container (optional; see step 4)
+- **Docker** — for the Redis + Phoenix containers (`make up`). Optional: the
+  offline demo runs green without them.
 
-## 1. Clone + base setup (everyone, 2 minutes)
+## 1. Pull-to-run (everyone — full stack in ~4 commands)
 ```bash
-git clone git@github.com:Sixxhi/AI-Hackathon-20206.git
-cd AI-Hackathon-20206
-git checkout immune-v1
-make setup                 # uv sync — identical deps for everyone (uv.lock)
-make test                  # 6 invariants -> all pass
-make demo                  # side-by-side naive vs IMMUNE (offline, deterministic)
+git clone git@github.com:Sixxhi/AI-Hackathon-20206.git   # or: git pull
+cd AI-Hackathon-20206 && git checkout immune-v1
+make setup-all             # uv sync --all-extras — every lane's deps from uv.lock
+cp .env.example .env       # local Redis/Phoenix endpoints prefilled; add keys later
+make up                    # start redis (:6379) + phoenix (:6006) via docker compose
+make test                  # 7 invariants -> all pass
+make demo                  # side-by-side naive vs IMMUNE
 ```
-If `make demo` is green, you're ready. Everything below is additive.
+If `make demo` is green, you're ready. **`make up` is optional** — without it,
+`USE_REDIS`/`USE_PHOENIX` simply stay off and the offline demo still runs green
+(the integrations degrade gracefully). Add API keys to `.env` when your lane
+needs them (steps 3 & 6). The base path (no Docker, no keys) is just
+`make setup && make test && make demo`.
 
 ## 2. Environment file
 ```bash
@@ -50,26 +56,36 @@ Switch provider/model with **no code change** — just edit `IMMUNE_LLM_PROVIDER
 config knobs in [immune/config.py](../immune/config.py).
 
 ## 4. Redis (P2) — memory store + vector search
-Already running locally on this machine (brew Redis 8). Teammates: pick one path
-(Docker / brew / cloud) in **[REDIS.md](REDIS.md)**. Quick version:
+`make up` starts redis-stack in Docker (see [docker-compose.yml](../docker-compose.yml));
+data persists in a named volume across restarts. `store.py` mirrors every memory
+mutation into `immune:<ns>:mem:<id>` hashes. Verify:
 ```bash
-docker run -d --name my-redis -p 6379:6379 redis:latest    # OR: brew services start redis
-make lane-infra            # installs redis-py + sentry-sdk
-uv run --extra infra python -c "import redis,os; print(redis.from_url(os.getenv('REDIS_URL')).ping())"
+make up                    # or: docker compose up -d redis
+uv run python -c "import redis,os; from dotenv import load_dotenv; load_dotenv(); print(redis.from_url(os.getenv('REDIS_URL')).ping())"
+docker exec immune-redis redis-cli KEYS 'immune:*'
 ```
+Other paths (brew / cloud) and the vector-search roadmap: **[REDIS.md](REDIS.md)**.
 
-## 5. Arize (P3) — tracing + evals
-Already set up + verified on this machine (project `immune` is live). Full runbook,
-including the `ax` CLI auth and the Arize Skills for coding agents:
-**[ARIZE.md](ARIZE.md)**. Quick verify:
+## 5. Arize / Phoenix (P3) — tracing + evals
+`make up` also starts **local Phoenix** on http://localhost:6006 (zero network,
+demo-safe). `init_tracing()` (in [immune/tracing.py](../immune/tracing.py)) sends
+spans there automatically once `PHOENIX_COLLECTOR_ENDPOINT` is set (it is, in
+`.env.example`). For **Arize cloud** (post-hackathon) set `ARIZE_API_KEY` /
+`ARIZE_SPACE_ID` — full runbook + `ax` CLI in **[ARIZE.md](ARIZE.md)**. Verify:
 ```bash
-uv run --extra agent scripts/arize_smoketest.py   # sends a test trace
-ax projects list                                  # 'immune' should appear
+make up                                   # phoenix UI -> :6006
+uv run demo.py && open http://localhost:6006   # traces appear after a run
 ```
 
 ## 6. Sentry (P2) — quarantine alerts
-Set `SENTRY_DSN` in `.env`; `USE_SENTRY` flips on. Wire `sentry_sdk.capture_message`
-into `store.quarantine()`. See [REDIS.md](REDIS.md#sentry-on-quarantine-also-p2).
+**Wired** — `store.quarantine()` fires `sentry_sdk.capture_message` (gated on
+`USE_SENTRY`). Just add your DSN:
+```bash
+# in .env:
+SENTRY_DSN=https://...@...ingest.sentry.io/...
+uv run demo.py            # quarantine events land in your Sentry project
+```
+With no DSN, `USE_SENTRY` stays off and the call is a no-op — demo unaffected.
 
 ## Lane cheat-sheet
 - `make setup` — base (everyone)
