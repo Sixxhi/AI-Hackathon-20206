@@ -32,7 +32,7 @@ test:           ## run invariant tests
 demo:           ## run the side-by-side demo
 	uv run demo.py
 
-demo-firewall:  ## THE demo: Claude agent + Redis memory firewall, poisoned & healed (live)
+demo-firewall:  ## THE demo: immune system live on a real Claude + Redis agent, poisoned & healed
 	REDIS_URL=$${REDIS_URL:-redis://localhost:6379} IMMUNE_LIVE=1 uv run --extra agent --extra infra python demo_firewall.py
 
 demo-firewall-offline: ## same break-and-heal, deterministic, zero network (backup)

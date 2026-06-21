@@ -91,115 +91,36 @@ uv sync --extra infra      # or: make lane-infra  (installs redis-py + sentry-sd
 uv run --extra infra python -c "import redis,os; r=redis.from_url(os.getenv('REDIS_URL','redis://localhost:6379/0')); print(r.ping())"
 ```
 
-## Vector search — use RedisVL (the prize-qualifying path)
+## Vector search — how it's wired (shipped)
 
-**RedisVL** (Redis Vector Library) is a listed *qualified tool* and the cleanest
-Python path — use it so the prize criterion "Using Redis beyond caching" is
-obvious. `pip install redisvl` (add to the `infra` extra).
+Recall runs **raw RediSearch** (`FT.CREATE` FLAT/COSINE + `FT.SEARCH … KNN`) in
+[`immune/redis_index.py`](../immune/redis_index.py); [`immune/store.py`](../immune/store.py)
+mirrors each memory as a hash with a FLOAT32 `embedding` and exposes
+`vector_candidates()`. Quarantine is enforced at the index via `@status:{active}`,
+so a jailed memory can't be returned at all.
 
-```python
-from redisvl.index import SearchIndex
-from redisvl.query import VectorQuery
-# define a schema (fields: text, topic, source, trust, status, embedding[VECTOR])
-# index.create(); index.load(records); index.query(VectorQuery(vector=..., ...))
-```
-RedisVL uses the `FT.*` search engine under the hood, so it needs a Redis with the
-**query engine**: `redis:latest` Docker (option A) or **Redis Cloud** — *not* the
-brew 8.6.3 here (it has vector sets but no `FT.*`). Easiest: run option A's
-container, or use the Cloud DB you create with the credits.
+Needs a Redis with the **query engine** (`FT.*`): the brew **8.6.3** on this
+machine has vector sets but *not* `FT.*` — use the `redis:latest` Docker (setup A)
+or **Redis Cloud**. FLAT (not HNSW) is deliberate: exact cosine = deterministic
+ranking. **Never run a vector query inside `replay()`** — replay uses the
+in-memory working set so attribution stays reproducible.
 
-Lower-level alternatives if you don't want RedisVL:
+> RedisVL / Agent Memory Server / LangCache were evaluated as design options but
+> are **not** in the shipped path. Don't reach for them unless you're replacing
+> `redis_index.py` wholesale.
 
-| Approach | Commands | Needs |
-|----------|----------|-------|
-| **Vector sets** | `VADD` / `VSIM` | any Redis 8 (brew 8.6.3 ✓) — works *now*, but RedisVL reads better in the demo |
-| **Raw RediSearch** | `FT.CREATE ... VECTOR HNSW` / `FT.SEARCH` | `redis:latest` / Cloud |
+## How it plugs into IMMUNE (implemented)
 
-Either way: **load the working set into memory for replay** — never run a vector
-query inside `replay()`.
+[`immune/store.py`](../immune/store.py) keeps the same public surface
+(`add` / `search` / `quarantine` / `parole` / `snapshot`); `add()` mirrors to a
+Redis hash + indexes the embedding, recall calls `vector_candidates()`
+(`FT.SEARCH … KNN`), and `quarantine_cascade()` flips the `status` field so the
+index stops serving it. Everything stays green offline (in-memory cosine) when
+`REDIS_URL` is unset.
 
-## Redis AI tools worth leveraging (for the "beyond caching" criterion)
-
-The judges explicitly reward using Redis's AI tooling. Options, easiest first:
-
-- **`npx skills add redis/agent-skills`** — Redis's Agent Skill so Claude Code
-  writes Redis code the expert way (same idea as the Arize skills). Fastest start.
-- **RedisVL** — vector DB / semantic cache / LLM memory / semantic routing (above).
-- **Agent Memory Server** — RESTful + MCP server for dual-tiered agent memory
-  (session "working" + persistent "long-term").
-  https://github.com/redis-developer/agent-memory-server — a strong "agent memory"
-  story, but it's a separate service with its own memory model; only adopt as the
-  substrate if it fits the deterministic-replay design (evaluate before committing).
-- **LangCache** — Redis's semantic cache-as-a-service. Cache answers for
-  semantically-similar questions to cut LLM calls (pairs well with the live agent
-  + Arize evals; counts as "beyond caching" AI tooling).
-- **Redis AI Incubator** — experimental tools incl. `claude-mcp-redis`, `adk-redis`.
-  https://redis.io/ai-incubator/
-- **redis-ai-resources / python-recipes** — Redis's official cookbook of runnable
-  Jupyter recipes: vector search, RAG, semantic cache, agent memory, RedisVL.
-  Best copy-paste source for P2.
-  https://github.com/redis-developer/redis-ai-resources/tree/main/python-recipes
-
-## Workshop reference — "Hack Buddy"
-Redis's hands-on workshop repo (the one from the session):
-**https://github.com/justin-cechmanek/berkeley-ai-hackathon** — and the notebook is
-vendored locally at [reference/redis_ai_workshop.ipynb](reference/redis_ai_workshop.ipynb).
-
-The notebook builds a knowledge-grounded chatbot
-across the three features we care about — copy the patterns, swap their chatbot
-for IMMUNE:
-
-| Workshop part | Library | Steal it for |
-|---------------|---------|--------------|
-| **Vector search** | RedisVL | P2 retrieval — index memories, query by meaning ([P2-4](tasks/P2-infra.md)) |
-| **Semantic cache** | LangCache | optional: cache live-agent / eval-LLM answers |
-| **Agent memory** | Agent Memory SDK | the persistent-memory substrate option |
-
-Setup (their flow): free 30 MB DB at redis.io/try-free (use code `CALHACKER2026`
-for $50) → enable LangCache + Agent Memory in the Cloud console → `.env` →
-`pip install -r requirements.txt`. Runs in Jupyter or Colab. (Their notebook uses
-OpenAI; we'd point it at our swappable provider — see [config.py](../immune/config.py).)
-
-**Vendored locally:** the notebook
-[reference/redis_ai_workshop.ipynb](reference/redis_ai_workshop.ipynb), the slide
-deck [reference/redis_workshop_slides.pdf](reference/redis_workshop_slides.pdf)
-(step-by-step Cloud/LangCache/Agent-Memory setup screenshots), and their env
-template [reference/redis_workshop.env.example](reference/redis_workshop.env.example).
-
-### Cloud service setup (from the deck)
-- **Redis DB:** redis.io/try-free → **Databases → New Database → "Try 30 MB for
-  Free"** under Essentials → name, version 8.4, any vendor/region → **Create
-  database** → **Connect** for the connection snippet + username/password.
-- **LangCache:** left nav → **LangCache** → accept preview terms → **Quick create**
-  → copy the API key (**shown once!**).
-- **Agent Memory:** left nav → **Agent Memory** → **Quick create**.
-
-### Their env vars (note: split host/port, not a single URL)
-The workshop uses discrete vars rather than our `REDIS_URL`. Both work with
-redis-py / RedisVL — if you adopt LangCache/Agent Memory, add these to `.env`:
-```
-REDIS_HOST=...  REDIS_PORT=...  REDIS_USER=default  REDIS_PASSWORD=...
-LANGCACHE_URL=...  LANGCACHE_CACHE_ID=...  LANGCACHE_API_KEY=lc1_...
-AGENT_MEMORY_ENDPOINT=...  AGENT_MEMORY_STORE_ID=...  AGENT_MEMORY_API_KEY=mem1_...
-```
-(IMMUNE's [config.py](../immune/config.py) reads `REDIS_URL`; either compose it
-from host/port/password or add these vars if a lane needs the managed services.)
-
-## How it plugs into IMMUNE (P2 lane)
-
-Swap the internals of [immune/store.py](../immune/store.py) behind the **same**
-public surface (`add` / `search` / `quarantine` / `parole` / `snapshot`):
-
-- `add()` → write a Redis hash (`MemoryRecord` maps 1:1 to a hash) + index its embedding.
-- `_candidates()` → vector query (`VSIM` or `FT.SEARCH`) instead of the in-memory topic match.
-- `quarantine()` / trust updates → update the hash field; **fire a Sentry event**
-  here (see below). Gate everything on `IMMUNE_BACKEND=redis|memory` (default `memory`)
-  so `make demo` stays green offline.
-
-### Sentry on quarantine (also P2)
-`SENTRY_DSN` is read in config (`USE_SENTRY`). When set, call
-`sentry_sdk.capture_message(...)` in `quarantine()` so a poisoned-memory event
-shows up as a reliability/security incident. ~30 min, big narrative payoff.
+**Sentry on quarantine** — when `SENTRY_DSN` is set,
+[`immune/sentry_report.py`](../immune/sentry_report.py) fires an incident on
+quarantine with the replay trail. See [FIREWALL.md](FIREWALL.md) live.
 
 ## Quick reference
 ```bash

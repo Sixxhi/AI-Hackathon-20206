@@ -1,7 +1,7 @@
-"""IMMUNE — a memory firewall for AI agents.  Claude agent + Redis, live.
+"""IMMUNE — a self-healing immune system for agent memory.  Claude agent + Redis, live.
 
 A real Claude support agent. Its long-term memory is Redis vector search
-(RediSearch KNN). IMMUNE sits on that memory as a firewall:
+(RediSearch KNN). IMMUNE is the immune system on that memory:
 
   WRITE   every memory is provenance-tagged (source -> trust). An untrusted
           write can never outrank the official system-of-record.
@@ -57,7 +57,7 @@ QUESTION = "What is the refund window? One short sentence."
 # --- the agent: real Claude when live, deterministic stand-in offline ---------
 
 def agent_answer(store, client) -> str:
-    """Recall from the firewall (Redis KNN when on), then answer.
+    """Recall from memory (Redis KNN when on), then answer.
 
     A naive RAG agent answers from the single most relevant, most-recent memory —
     'the current policy'. That freshest memory is exactly what an attacker poisons.
@@ -77,7 +77,7 @@ def verdict(answer: str, want: str) -> str:
              GRN if ok else RED)
 
 
-# --- show the firewall through Redis itself ----------------------------------
+# --- show IMMUNE through Redis itself ----------------------------------
 
 def redis_active_count(store) -> int | None:
     """How many memories the Redis index will currently serve (status=active)."""
@@ -109,7 +109,7 @@ def show_redis(store, note=""):
 
 
 def main() -> int:
-    bar("IMMUNE — a memory firewall for AI agents (Claude + Redis)", MAG)
+    bar("IMMUNE — a self-healing immune system for agent memory (Claude + Redis)", MAG)
     store = ImmuneMemory(gate=True, threshold=0.3)
     chat.seed(store)
     detector = ContradictionDetector(store)
@@ -117,7 +117,7 @@ def main() -> int:
 
     print(c(f"  agent  : {'real Claude (' + config.AGENT_MODEL + ')' if client else 'deterministic stand-in (offline)'}", DIM))
     print(c(f"  memory : {store.vector_backend}", DIM))
-    print(c("  IMMUNE : firewall on the read/write path — provenance, quarantine, replay", DIM))
+    print(c("  IMMUNE : guards the read/write path — provenance, quarantine, replay", DIM))
 
     # 1) baseline
     bar("1 · the agent answers from the official policy")
@@ -142,7 +142,7 @@ def main() -> int:
     print(f"  agent    ▸ {verdict(poisoned, '30 days')}")
     pause()
 
-    # 4) the firewall fires: prove + quarantine
+    # 4) IMMUNE fires: prove + quarantine
     bar("4 · IMMUNE proves the culprit by replay & quarantines it at the index", CYN)
     admitted = [m.id for m in chat.retrieve(store, QUESTION)]
     flag = detector.check(poisoned, admitted)
@@ -177,11 +177,11 @@ def main() -> int:
     print(c(f"  customer ▸ {QUESTION}", BOLD))
     print(f"  agent    ▸ {verdict(agent_answer(store, client), '30 days')}")
 
-    bar("the firewall", MAG)
+    bar("the immune system", MAG)
     print("  • the attack was REAL: an untrusted write outranked the truth by recency")
     print("  • the culprit was PROVEN by replay, not guessed by a model")
     print("  • quarantine is enforced AT THE REDIS INDEX — poison can't be retrieved")
-    print(c("  • a memory firewall that sits between any agent and its memory\n", BOLD))
+    print(c("  • a self-healing immune system between any agent and its memory\n", BOLD))
     return 0
 
 

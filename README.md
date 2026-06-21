@@ -23,7 +23,7 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 
 ## Docs
 
-- [docs/FIREWALL.md](docs/FIREWALL.md) — **the headline demo**: Claude agent + Redis memory firewall, run modes, sponsor map, the pitch script.
+- [docs/FIREWALL.md](docs/FIREWALL.md) — **the headline demo**: the immune system live on a real Claude + Redis agent, run modes, sponsor map, the pitch script.
 - [docs/DEMO.md](docs/DEMO.md) — the side-by-side naive-vs-IMMUNE demo: run modes, annotated output.
 - [docs/SETUP.md](docs/SETUP.md) — set up the whole stack (uv, env, LLM, Redis, Arize, Sentry).
 - [docs/CONCEPT.md](docs/CONCEPT.md) — the full idea, problem, demo story, scope, and track/sponsor fit.
@@ -35,12 +35,11 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 - [docs/REDIS.md](docs/REDIS.md) — Redis integration runbook (P2): setup paths, vector search, Sentry on quarantine.
 - [TEAM.md](TEAM.md) — onboarding and per-lane ownership.
 
-## The headline demo — a memory firewall (Claude + Redis)
+## The headline demo — the immune system on a real agent (Claude + Redis)
 
-IMMUNE is a **firewall for agent memory**: it sits on the read/write path,
-provenance-tags every write, and quarantines poison so it can't be retrieved.
-The flagship demo runs a **real Claude agent** whose memory is **Redis vector
-search**, gets it poisoned, and heals it — live.
+Same self-healing immune system, shown live: a **real Claude agent** whose
+long-term memory is **Redis vector search** gets poisoned, and IMMUNE finds the
+culprit by replay, quarantines it, and heals the agent — in front of you.
 
 ```bash
 make demo-firewall            # live: real Claude + Redis; needs ANTHROPIC_API_KEY + Redis (make up)

@@ -42,8 +42,8 @@ getting quarantined.
 
 ### P4-3 · 🔴 must · ~1 h
 ## Side-by-side + QUARANTINED event
-Two columns: NAIVE (1/2, poison wins) vs IMMUNE (2/2, healed), and a red
-**QUARANTINED mem_14** banner when it fires. This IS the pitch.
+Two columns: NAIVE (1/4, poison wins) vs IMMUNE (4/4, healed), and a red
+**QUARANTINED** culprit banner when it fires. This IS the pitch.
 
 **Done when** both runs render side-by-side with the accuracy numbers and the
 quarantine event.

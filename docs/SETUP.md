@@ -16,7 +16,7 @@ cd AI-Hackathon-20206 && git checkout immune-v1
 make setup-all             # uv sync --all-extras — every lane's deps from uv.lock
 cp .env.example .env       # local Redis/Phoenix endpoints prefilled; add keys later
 make up                    # start redis (:6379) + phoenix (:6006) via docker compose
-make test                  # 7 invariants -> all pass
+make test                  # invariant tests -> all pass
 make demo                  # side-by-side naive vs IMMUNE
 ```
 If `make demo` is green, you're ready. **`make up` is optional** — without it,

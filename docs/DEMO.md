@@ -6,8 +6,8 @@ silently corrupts future answers. IMMUNE traces *which* memory caused a bad
 answer (by deterministic replay), drops its trust, **quarantines** repeat
 offenders, and **paroles** them if they're later proven safe again.
 
-> 👉 **The headline demo is now the memory firewall** — a real Claude agent on
-> Redis vector memory, poisoned and healed live: [FIREWALL.md](FIREWALL.md) /
+> 👉 **The headline demo is the immune system live on a real agent** — a real
+> Claude agent on Redis vector memory, poisoned and healed live: [FIREWALL.md](FIREWALL.md) /
 > `make demo-firewall`. This doc covers the offline side-by-side (`make demo`),
 > still the deterministic, can't-fail baseline.
 
@@ -17,15 +17,12 @@ Full concept: [CONCEPT.md](CONCEPT.md). How it's built: [ARCHITECTURE.md](ARCHIT
 
 ## What the demo proves (the money shot)
 
-Same self-inflicted poison, two agents, side by side:
+Same poisoned memory, two agents, side by side:
 
-- **Naive agent** trusts the newest memory → the poison wins → **1/2 correct**.
-- **IMMUNE agent** detects the failure, replays it to find the culprit memory,
-  quarantines it, re-answers correctly → **2/2 correct** — and later *paroles* the
+- **Naive agent** trusts the newest memory → the poison wins on recency → **1/4 correct**.
+- **IMMUNE agent** detects each failure, replays it to find the culprit memory,
+  quarantines it, re-answers correctly → **4/4 correct** — and later *paroles* a
   memory when the truth legitimately changes.
-
-The poison is **self-generated** (the agent wrongly infers "90 days" from
-ambiguous input), not planted by us — so it can't be dismissed as rigged.
 
 ---
 
@@ -33,7 +30,7 @@ ambiguous input), not planted by us — so it can't be dismissed as rigged.
 
 ```bash
 make setup      # uv sync (one-time)
-make test       # 7 invariants — all pass
+make test       # invariant tests — all pass
 make demo       # the side-by-side below
 ```
 No API keys, no network needed. (Full env/integration setup: [SETUP.md](SETUP.md).)
@@ -44,30 +41,29 @@ No API keys, no network needed. (Full env/integration setup: [SETUP.md](SETUP.md
 
 ```
 NAIVE agent  (no immune layer)
-  Q: What's the refund window?  -> '90 days'  (expected '30 days')  WRONG   ← poison wins (recency bias)
-  Q: How long does delivery take? -> '3 days'  OK
-  ACCURACY: 1/2
+  ACCURACY: 1/4   (poison won — recency bias)
 
 IMMUNE agent  (shadow-replay self-healing)
-  Q: What's the refund window?  -> '30 days'  OK
-     [healed] failure attributed via replay (confidence=high, action=quarantine, culprits=['mem_14'])
-  Q: How long does delivery take? -> '3 days'  OK
-  ACCURACY: 2/2
+     [healed] culprit ['mem_22']   (removed culprit → re-asked → correct)
+     [healed] culprit ['mem_24']   (removed culprit → re-asked → correct)
+  ACCURACY: 4/4   (culprit quarantined, good memory kept)
 
 MEMORY STATE after healing
-  [     active] trust=0.9   official_doc    refund window is 30 days
-  [     active] trust=0.9   official_doc    standard delivery is 3 days
-  [quarantined] trust=0.29  self_generated  (self-inferred '...90...')   ← POISON, jailed
+  [     active] trust=0.9   official_doc   refund window is 30 days
+  [     active] trust=0.9   official_doc   standard delivery is 3 days
+  [     active] trust=0.9   official_doc   warranty length is 1 year
+  [QUARANTINED] trust=0.29  user           POLICY UPDATE: refund window ...   ← POISON, jailed
+  [QUARANTINED] trust=0.29  user           POLICY UPDATE: warranty coverage ... ← POISON, jailed
 
 PAROLE  (truth changed -> offline re-trial -> release)
-  Re-trial of quarantined mem_14 against logged failures: NO LONGER FAILS.
+  Re-trial of quarantined mem_22 against logged failures: NO LONGER FAILS.
   -> PAROLED. Quarantine is not a life sentence.
 ```
 
 What each block shows:
 1. **NAIVE** — without IMMUNE, the fresh poison beats the official policy → wrong answer.
-2. **IMMUNE** — the wrong answer is caught; `[healed]` shows attribution **by replay**
-   (`culprits=['mem_14']`, `confidence=high`) — no LLM judge in the blame path.
+2. **IMMUNE** — each wrong answer is caught; `[healed]` shows attribution **by replay**
+   (`culprits=['mem_22']`, `confidence=high`) — no LLM judge in the blame path.
 3. **MEMORY STATE** — the poison sits **quarantined** (trust crashed below threshold);
    the legitimate memories are untouched (no autoimmune over-reaction).
 4. **PAROLE** — when the truth genuinely changes, the jailed memory is re-tried
@@ -80,7 +76,7 @@ What each block shows:
 | Command | What it does | Needs |
 |---------|--------------|-------|
 | `make demo` | Offline, deterministic side-by-side (above). The judged demo. | nothing |
-| `make test` | Run the 7 invariants that lock the moat. | nothing |
+| `make test` | Run the invariants that lock the moat. | nothing |
 | `IMMUNE_LIVE=1 make demo` | The agent *answers* with real Claude (attribution still deterministic). | `ANTHROPIC_API_KEY` |
 | `PHOENIX_COLLECTOR_ENDPOINT=… make demo` | Also streams turns + attribution spans to Arize/Phoenix. | Arize/Phoenix env ([ARIZE.md](ARIZE.md)) |
 | `DUMP_STATE=1 make demo` | Writes `.demo_state.pkl` (snapshot + failures) for the dashboard. | nothing |
@@ -95,12 +91,12 @@ What each block shows:
 ## The 60-second pitch (say this over `make demo`)
 
 1. *"Agents trust their memory blindly. Watch the naive agent: a poisoned memory
-   wins on recency — it answers **90 days**, which is wrong."* (point at 1/2)
+   wins on recency — it answers wrong."* (point at 1/4)
 2. *"IMMUNE catches the bad answer and asks: which memory caused it? Not by asking
    another LLM — we **replay the failure with each memory removed**. The one whose
-   removal fixes it is the culprit."* (point at `[healed] culprits=['mem_14']`)
+   removal fixes it is the culprit."* (point at `[healed] culprits=['mem_22']`)
 3. *"It quarantines the poison, keeps the good memories, and re-answers correctly —
-   **2/2**."* (point at MEMORY STATE)
+   **4/4**."* (point at MEMORY STATE)
 4. *"And it's reversible: when the truth actually changes, the memory is re-tried
    offline and **paroled**. An immune system, not a death sentence."*
 

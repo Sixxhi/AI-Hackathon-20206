@@ -1,14 +1,14 @@
-# The firewall demo — Claude agent + Redis memory firewall
+# The headline demo — the immune system on a real Claude + Redis agent
 
-The headline demo. A **real Claude support agent** whose long-term memory is
-**Redis vector search**. IMMUNE is the **firewall** on that memory: it
+A **real Claude support agent** whose long-term memory is **Redis vector
+search**. IMMUNE is the self-healing immune system on that memory: it
 provenance-tags every write, screens every read, and quarantines poison at the
 Redis index so the agent can never retrieve it again. Watch a real agent get
 poisoned and heal — live.
 
 Source: [`demo_firewall.py`](../demo_firewall.py).
 
-## What the firewall does
+## What IMMUNE does on each path
 
 | path | what IMMUNE does | automatic? |
 |------|------------------|-----------|
@@ -59,7 +59,7 @@ memory : Redis vector search (RediSearch KNN)
 ```
 
 The Redis counter going **3 → 4 → 3** (and "poison RETRIEVABLE" flipping to "poison
-not served") is the proof the firewall blocks the attack *at the index*, not just
+not served") is the proof IMMUNE blocks the attack *at the index*, not just
 in app logic.
 
 ## Sponsor map (all load-bearing)
@@ -75,7 +75,7 @@ in app logic.
 
 1. "AI agents have memory now — and memory can be poisoned. OWASP made it threat
    **ASI06**; it's been demoed on ChatGPT, Gemini, and Bedrock."
-2. "IMMUNE is a **firewall** for that memory." *(show the agent answer correctly)*
+2. "IMMUNE is a **self-healing immune system** for that memory." *(show the agent answer correctly)*
 3. "An attacker poisons it…" *(write)* "…and the agent is now confidently wrong —
    it'd refund on a lie." *(90 days)*
 4. "IMMUNE doesn't **guess** the culprit — it **proves** it by replaying the answer
