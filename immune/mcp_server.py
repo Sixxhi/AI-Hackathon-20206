@@ -49,7 +49,23 @@ class Engine:
         self.store = store or ImmuneMemory(gate=True, threshold=0.3)
         if seed and not self.store.all():
             self._load() or (chat.seed(self.store))
+        self._load_official()                      # operator system-of-record (out-of-band)
         self.detector = ContradictionDetector(self.store)
+
+    def _load_official(self) -> None:
+        """Register the operator's system-of-record from IMMUNE_OFFICIAL_PATH — a JSON
+        list of {text, answer, topic}. This is the out-of-band trusted channel: the
+        operator ships the file; an in-band agent/attacker can't write to it, so it
+        can't forge `official_doc`. Restores client-configurable anchors safely."""
+        path = os.getenv("IMMUNE_OFFICIAL_PATH")
+        if not path or not os.path.exists(path):
+            return
+        try:
+            for f in json.load(open(path)):
+                self.register_official(f["text"], answer=f.get("answer", ""),
+                                       topic=f.get("topic", "general"))
+        except Exception:
+            pass
 
     # --- persistence + recording --------------------------------------------
     def _record(self, op: str, payload: dict) -> None:
@@ -172,6 +188,20 @@ def build_server():
     def immune_status() -> dict:
         """Show current memory: active vs quarantined, with trust scores."""
         return engine.status()
+
+    admin_token = os.getenv("IMMUNE_ADMIN_TOKEN", "")
+
+    @mcp.tool()
+    def immune_register_official(text: str, answer: str = "", topic: str = "general",
+                                 admin_token_arg: str = "") -> dict:
+        """OPERATOR-ONLY: register a system-of-record fact (an anchor `check` defends).
+        Requires the server's IMMUNE_ADMIN_TOKEN — so an agent/attacker driving these
+        tools cannot forge trust. Operators can also seed anchors via IMMUNE_OFFICIAL_PATH.
+        """
+        if not admin_token or admin_token_arg != admin_token:
+            return {"error": "register_official requires the operator IMMUNE_ADMIN_TOKEN "
+                             "(set out-of-band on the server). Trust is not agent-assertable."}
+        return engine.register_official(text, answer=answer, topic=topic)
 
     return mcp
 

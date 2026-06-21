@@ -24,10 +24,21 @@ IMMUNE_RECORD_PATH=~/.immune/record.jsonl  # every op appended (poison + heal tr
 | `immune_check(query, answer)` | if the answer contradicts a *trusted* memory, attribute the culprit by deterministic replay and quarantine it. If nothing is attributable, it only **flags for review** — it does not overwrite your answer. |
 | `immune_status()` | current memory: active vs quarantined, with trust scores |
 
-**Trust is operator-established, not agent-asserted.** The system-of-record is
-registered out-of-band by the operator (`Engine.register_official(...)` at startup
-/ config) — *not* through an agent tool. This is what makes the threat model hold:
-an attacker writing through `immune_remember` cannot label their poison "official."
+**Trust is operator-established, not agent-asserted** — and there are two
+out-of-band ways an operator sets the system-of-record (an attacker driving the
+agent tools can do neither):
+
+```bash
+# (a) config file, loaded as trusted at server startup (recommended)
+export IMMUNE_OFFICIAL_PATH=~/.immune/official.json   # [{"text","answer","topic"}, ...]
+
+# (b) the operator-only tool, gated by a server secret the agent never sees
+export IMMUNE_ADMIN_TOKEN=$(openssl rand -hex 16)
+#   immune_register_official(text, answer, topic, admin_token_arg=<token>)
+```
+This is what makes the threat model hold: an attacker writing through
+`immune_remember` cannot label their poison "official," and cannot call
+`register_official` without the operator's token.
 
 The blame path stays deterministic: `check()` attributes by replay over structured
 memory — **no model judges who is guilty**.
