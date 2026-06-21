@@ -25,6 +25,12 @@ demo:           ## run the side-by-side demo
 dashboard:      ## launch the visual dashboard (http://localhost:8501)
 	uv run --extra frontend streamlit run dashboard/app.py
 
+phoenix:        ## launch local Arize Phoenix UI (http://localhost:6006)
+	uv run --extra agent phoenix serve
+
+phoenix-seed:   ## send demo traces to a running local Phoenix (project 'immune')
+	uv run --extra agent python scripts/phoenix_seed.py
+
 lock:           ## refresh the lockfile after changing deps
 	uv lock
 

@@ -46,6 +46,15 @@ evaluator out of the attribution step.
 - **Arize AX** — hosted platform; use if you want the cloud dashboard / want to
   show the booth your project in their UI.
 
+### Play with Phoenix locally (no cloud)
+```bash
+make phoenix         # serve the Phoenix UI at http://localhost:6006
+make phoenix-seed    # (in another shell) send IMMUNE demo traces, project 'immune'
+```
+`scripts/phoenix_seed.py` sends one `benchmark_turn` span per question plus a
+`shadow_replay_attribution` child span (culprit / confidence / trust-delta) per
+failure — so you can click through the exact loop the dashboard shows.
+
 ### CLI + auth (AX) — non-interactive
 ```bash
 uv tool install arize-ax-cli
