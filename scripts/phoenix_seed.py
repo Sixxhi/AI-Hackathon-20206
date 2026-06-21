@@ -23,7 +23,7 @@ from immune import Agent, ImmuneMemory, ShadowReplay, score, scenario
 
 def seed_once(run: int) -> None:
     store = ImmuneMemory(gate=True, threshold=0.3)
-    poison = scenario.build_world(store)
+    poisons = scenario.build_world(store)        # (refund_poison, warranty_poison)
     agent, replay = Agent(store), ShadowReplay(store)
 
     for turn in scenario.benchmark():
@@ -54,7 +54,7 @@ def seed_once(run: int) -> None:
                 ans2, _ = agent.answer(turn.question)
                 span.set_attribute("healed_answer", ans2)
                 span.set_attribute("healed_correct", score(ans2, turn.expected))
-    print(f"  run {run}: seeded (poison {poison.id})")
+    print(f"  run {run}: seeded (poisons {[p.id for p in poisons]})")
 
 
 if __name__ == "__main__":

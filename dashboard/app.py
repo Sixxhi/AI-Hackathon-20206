@@ -32,7 +32,8 @@ def run_scenario(threshold: float) -> dict:
         naive_rows.append((t.question, ans, t.expected, score(ans, t.expected)))
 
     store = ImmuneMemory(gate=True, threshold=threshold)
-    poison = scenario.build_world(store)
+    poisons = scenario.build_world(store)        # (refund_poison, warranty_poison)
+    refund_poison = poisons[0]
     agent, replay = Agent(store), ShadowReplay(store)
     imm_rows, events = [], []
     for t in scenario.benchmark():
@@ -52,14 +53,14 @@ def run_scenario(threshold: float) -> dict:
                            topic="refund_window", answer="90 days",
                            source="official_doc", trust=0.9))
     for tl in replay.failed_log:
-        if poison.id in tl.admitted_ids:
+        if refund_poison.id in tl.admitted_ids:
             tl.expected = "90 days"
     released = replay.parole()
 
     return dict(naive_rows=naive_rows, imm_rows=imm_rows,
                 snapshot=store.snapshot(), trust_history=replay.trust_history,
-                poison_id=poison.id, final_status=store.get(poison.id).status,
-                released=poison.id in released)
+                poison_id=refund_poison.id, final_status=store.get(refund_poison.id).status,
+                released=refund_poison.id in released)
 
 
 def _short(m: dict) -> str:
