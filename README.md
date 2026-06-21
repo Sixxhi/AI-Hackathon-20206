@@ -44,6 +44,12 @@ make test                # invariants lock the moat
 Demo output: naive agent scores 1/2 (poison wins via recency), IMMUNE heals to
 2/2, the poison ends **quarantined**, then **paroled** once truth changes.
 
+```bash
+make dashboard           # visual web dashboard → http://localhost:8501
+```
+Dark, interactive view: trust-score timeline, side-by-side, live memory table,
+parole — with a quarantine-threshold slider. See [docs/DEMO.md](docs/DEMO.md).
+
 ## The moat (`immune/replay.py`)
 
 Attribution and parole are ONE engine — offline counterfactual replay against

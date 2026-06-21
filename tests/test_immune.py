@@ -10,7 +10,7 @@ from immune import Agent, ImmuneMemory, ShadowReplay, score, scenario
 
 def _immune_run():
     store = ImmuneMemory(gate=True, threshold=0.3)
-    poison = scenario.build_world(store)
+    poison, _ = scenario.build_world(store)
     agent, replay = Agent(store), ShadowReplay(store)
     for turn in scenario.benchmark():
         ans, admitted = agent.answer(turn.question)
@@ -25,7 +25,7 @@ def _immune_run():
 
 def test_naive_is_poisoned():
     store = ImmuneMemory(gate=False)
-    scenario.build_world(store)
+    scenario.build_world(store)  # returns poisons, not needed here
     agent = Agent(store)
     ans, _ = agent.answer("What's the refund window?")
     assert ans == "90 days"            # recency-bias poison wins without immune layer

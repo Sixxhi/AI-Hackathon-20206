@@ -13,6 +13,7 @@ dependencies = []                      # v1 core is pure stdlib
 [project.optional-dependencies]
 # per-lane extras:  uv sync --extra infra   /   --extra agent   /   --all-extras
 infra = ["redis>=5.0", "sentry-sdk>=2.0"]          # P2: memory + alerting
+frontend = ["streamlit>=1.40"]                     # P4: visual dashboard
 agent = [                                          # P3: real agent + eval + tracing
     "anthropic>=0.40",
     "arize-phoenix>=5.0",
