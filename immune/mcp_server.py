@@ -82,13 +82,25 @@ class Engine:
 
     # --- the four operations -------------------------------------------------
     def remember(self, text: str, source: str = "user", answer: str = "",
-                 topic: str = "general") -> dict:
+                 topic: str = "general", trusted: bool = False) -> dict:
+        # The trust LABEL is NOT caller-assertable on the agent-facing surface.
+        # Otherwise an attacker just labels poison "official_doc" and the trust
+        # hierarchy becomes an honor system. Only an operator registering the
+        # system-of-record (trusted=True) may mint official_doc; everything an
+        # agent writes is untrusted regardless of the source string it claims.
+        if source == "official_doc" and not trusted:
+            source = "user"
         rec = self.store.add(MemoryRecord(text=text, topic=topic, answer=answer or text,
                                           source=source, trust=0.9 if source == "official_doc" else 0.5))
         self._save()
         out = {"id": rec.id, "source": rec.source, "trust": rec.trust}
         self._record("remember", {"text": text, **out})
         return out
+
+    def register_official(self, text: str, answer: str = "", topic: str = "general") -> dict:
+        """Operator-only: register a system-of-record fact (the trusted channel an
+        agent cannot forge). NOT exposed as an agent MCP tool."""
+        return self.remember(text, source="official_doc", answer=answer, topic=topic, trusted=True)
 
     def recall(self, query: str, k: int = 4) -> dict:
         hits = chat.retrieve(self.store, query, k=k)            # gated: poison filtered
@@ -108,15 +120,22 @@ class Engine:
                 in chat._mock_answer(self.store, query, exclude=tuple(excl)).strip().lower(),
                 suspicion_key=chat._suspicion_key(self.store))
             culprits, conf = attributor.attribute(admitted)
-            taken: list[str] = []
-            for mid in culprits:
-                taken += self.store.quarantine_cascade(mid)
-            self._save()
-            result.update(culprits=culprits, confidence=conf,
-                          quarantined=sorted(set(taken)),
-                          replays=attributor.replays,
-                          reason=flag.reason,
-                          healed_answer=chat._mock_answer(self.store, query))
+            result.update(confidence=conf, reason=flag.reason, replays=attributor.replays)
+            if culprits:
+                taken: list[str] = []
+                for mid in culprits:
+                    taken += self.store.quarantine_cascade(mid)
+                self._save()
+                result.update(culprits=culprits, quarantined=sorted(set(taken)),
+                              healed_answer=chat._mock_answer(self.store, query))
+            else:
+                # Flagged vs the system-of-record but NO memory is attributable
+                # (paraphrase / semantic gap). Do NOT quarantine and do NOT
+                # override the caller's answer — only flag it for review.
+                result["action"] = "review"
+                result["note"] = ("answer differs from the system-of-record but no "
+                                  "stored memory is attributable — left for review, "
+                                  "nothing quarantined or overridden")
         self._record("check", {"query": query, "answer": answer, **result})
         return result
 
