@@ -1,137 +1,151 @@
 # IMMUNE — architecture
 
-A small, deterministic core with explicit seams for the v2 sponsor swaps. The
-whole v1 runs offline with zero API keys, which is deliberate: the demo can't be
-broken by a network or a rate limit.
+An immune system for AI agent memory. A deterministic core (the blame path never
+calls an LLM) with real integrations wired in. The offline path runs with zero API
+keys so the demo can't be broken by a network or rate limit; live Claude, Redis,
+Arize/Phoenix, Sentry, and an MCP server attach as additive layers.
 
 ## The loop
 
 ```
-write  →  ImmuneMemory.add()              provenance + initial trust        store.py
-read   →  ImmuneMemory.search()           admission gate, returns admitted  store.py
-log    →  TurnLog.admitted_ids            what fed this answer              schemas.py
-fail   →  ShadowReplay.handle_failure()   ablation → quarantine  ★ moat     replay.py
-heal   →  ShadowReplay.parole()           offline re-trial → release ★      replay.py
+write   →  ImmuneMemory.add(mem, parents)        record + provenance edge        store.py
+retrieve→  ImmuneMemory.search(topic)            admission gate (trust+status)   store.py / embed.py
+answer  →  Agent.answer(q)                       mock (default) or live Claude   agent.py
+detect  →  ContradictionDetector.check()         answer vs high-trust anchor     detectors.py   ← no oracle
+attribute→ ShadowReplay.handle_failure()         group-testing replay → culprits replay.py / attribution.py  ★
+quarantine→ store.quarantine_cascade(culprit)    jail culprit + derived subtree  store.py / provenance.py
+heal    →  Agent.answer(q)                        re-ask → correct
+parole  →  ShadowReplay.parole()                  offline re-trial → release      replay.py  ★
 ```
 
-★ = the wedge. Attribution and parole are **one engine**: offline counterfactual
-replay against logged failed turns.
+★ = the moat: **deterministic counterfactual replay**. The only thing the blame
+path calls is a deterministic re-execution — no LLM, no network, no judge.
 
 ## Components
 
-### `immune/schemas.py` — the locked contracts
-The hour-0 interfaces everyone codes against. Change these only by telling the
-team.
+### `immune/schemas.py` — locked contracts
+`MemoryRecord` (text, topic, answer, source, trust, status, seq, id;
+`is_admissible(threshold)` = active & trust ≥ threshold) and `TurnLog` (question,
+expected, answer, admitted_ids, correct). Deterministic ids; map 1:1 onto Redis hashes.
 
-- **`MemoryRecord`** — `text`, `topic` (retrieval key), `answer` (the claim acted
-  on), `source` (provenance), `trust` (0..1, the immune signal), `status`
-  (`active` | `quarantined`), `seq` (deterministic recency order), `id`.
-  `is_admissible(threshold)` = active **and** `trust >= threshold`.
-- **`TurnLog`** — `question`, `expected` (benchmark ground truth), `answer`,
-  `admitted_ids` (what fed the turn — this is what makes replay possible),
-  `correct`.
+### `immune/store.py` — `ImmuneMemory` (memory layer, P2)
+In-memory source of truth (deterministic, so replay never depends on a service).
+- `add(mem, parents)` — write + record a provenance edge.
+- `search(topic)` — admission gate (`is_admissible`); `gate=False` = the naive agent.
+- `decay` / `quarantine` / **`quarantine_cascade`** (jail culprit **and everything
+  derived from it** via the provenance graph) / `parole`.
+- **Side effects, never in the read path:** mirrors every write to **Redis**
+  (`immune:<ns>:mem:<id>` hashes), fires **Sentry** on quarantine. Both degrade
+  silently if the service is down — offline demo + tests run identically.
 
-> These dataclasses are designed to map 1:1 onto Redis hashes for the v2 swap.
+### `immune/embed.py` — deterministic embeddings
+Zero-dependency hashed character-n-gram + word-bigram vectors (blake2b, L2-norm,
+256-dim). **Byte-for-byte reproducible** across machines — this is what lets
+free-text retrieval coexist with reproducible replay. Same interface as a neural
+embedder, swappable later.
 
-### `immune/store.py` — `ImmuneMemory` (the memory layer)
-In-memory dict for v1. Public surface stays identical when the internals become
-Redis vector search.
+### `immune/provenance.py` — derivation DAG
+Tracks `parent → child` memory lineage. When attribution blames a node,
+`contaminated()` returns it **plus its descendants** — the defense against the
+"distillation hides provenance" threat (one poison contaminating everything
+derived from it). Pure bookkeeping; makes no trust decisions.
 
-- `add` / `get` / `all` — write + lookup.
-- `_candidates(topic)` — **the retrieval seam.** Today: topic match, **newest
-  first** (models the recency bias that lets fresh poison win). Swap this body
-  for vector search; nothing else changes.
-- `search(topic)` — candidates filtered by the admission gate (`is_admissible`),
-  unless `gate=False` (the naive agent).
-- `decay` / `quarantine` / `parole` — the immune controls that move trust and
-  status.
-- `snapshot()` — flat view for the dashboard / demo.
+### `immune/agent.py` — `Agent` (P3)
+- `route_topic` — keyword router (swap → embeddings).
+- `answer(q)` — **mock by default** (retrieve admissible → return top memory's
+  answer); **live Claude** when `IMMUNE_LIVE=1` (`_answer_claude` grounds on the
+  retrieved memory, no trust/provenance leaked into the prompt).
+- `_answer_mock` is the deterministic path used by replay — **even in live mode**.
+- `score(answer, expected)` — benchmark-only grader (substring, case-insensitive).
 
-### `immune/agent.py` — `Agent` + grader (deterministic mock)
-No network — runs with zero keys so v1 is instantly demoable. Swap the internals
-for Claude later; keep the signatures.
+### `immune/detectors.py` — failure signals **without ground truth** (the production trigger)
+- **`ContradictionDetector`** (default): flags a turn when the answer contradicts
+  the highest-trust in-scope `official_doc` memory (≥ `authority_trust`, default
+  0.7). No oracle, no human, no second LLM. The trust bar means a low-trust poison
+  can never frame a correct answer as a failure.
+- **`SelfConsistencyDetector`**: re-ask N times; disagreement ⇒ unstable memory.
+- An optional LLM contradiction check exists but is **only** allowed to decide
+  *whether to investigate*, never *who is guilty*.
 
-- `route_topic(text)` — keyword → topic router (swap → embeddings / Claude).
-- `Agent.answer(question)` — routes, retrieves admissible memories, returns the
-  **newest** one's answer plus the list of admitted ids.
-- `Agent.ingest_ambiguous(raw)` — the **self-poisoning** path. The agent *infers*
-  a wrong fact from ambiguous input and stores it itself. Because we don't inject
-  the poison, the demo can't be dismissed as rigged.
-- `score(answer, expected)` — ground-truth grader. **Benchmark-only eval signal**,
-  not a production dashboard.
+### `immune/attribution.py` — `Attributor` (scalable blame, the wedge)
+Finds the **minimal set** of memories whose removal flips fail→pass:
+1. **Adaptive peel** — remove most-suspect-first (untrusted/low-trust/recent
+   first; trusted memory ordered last) until the answer flips. The predicate is
+   **non-monotone** (a "peak": too few removed → still wrong; too many → the true
+   memory is gone too), so prefix binary-search is invalid — hence peel.
+2. **Delta-debug (ddmin) shrink** — reduce to a **1-minimal** flipping set,
+   sparing any good memory peeled early. Guarantees minimality regardless of order.
 
-### `immune/replay.py` — `ShadowReplay` (the moat)
-Attribution and parole, one offline engine. No LLM in the blame path (kills
-"your judge is also wrong"); no live re-test (kills "re-poison to find out it's
-poison").
+Beats fixed singles+pairs against **k-redundant poison** (k+1 identical copies),
+at ~O(D·log N) replays. Confidence: `high` (single culprit) / `medium` (minimal
+set) / `low` (no removal helps → soft-decay, don't quarantine).
 
-- `replay(question, expected, exclude)` — replay one turn under a counterfactual
-  exclusion; return pass/fail.
-- `attribute(turn)` → `(culprit_ids, confidence)`:
-  - **singles** — a removal that flips fail→pass is an empirical culprit →
-    `high`.
-  - **pairs** — interaction effects (two innocent-looking memories combine
-    wrong) → `medium`. Bounded by `max_subset` (default 2) to cap cost.
-  - nothing flips → `low` (ambiguous → do **not** quarantine).
-- `handle_failure(turn)` — confidence-gated action:
-  - `high` → quarantine the culprit(s).
-  - `medium` → quarantine the lowest-trust culprit, decay the rest.
-  - `low` → soft-decay only, quarantine nothing (anti-autoimmune).
-- `parole()` — for each quarantined memory with logged failures, re-admit it
-  *offline*, replay those failures, and release it only if it no longer
-  reproduces them. Never re-tests on live traffic.
+### `immune/replay.py` — `ShadowReplay` (attribution + parole, P1)
+- `replay(q, expected, exclude)` — re-execute on the **deterministic mock**, even
+  in live mode (a nondeterministic blame path would make culprits flicker).
+- `attribute()` delegates to `Attributor` with a trust/recency suspicion order.
+- `handle_failure()` → `{confidence, culprits, action, quarantined, cascade, replays}`.
+  high/medium → `quarantine_cascade` each culprit; low → soft-decay only.
+- `parole()` — re-admit a quarantined memory, replay its logged failures offline,
+  release only if it no longer reproduces them.
+- `trust_history` / `trust_timeline()` — per-event trust snapshots for the dashboard.
 
-### `immune/scenario.py` — the world + benchmark
-Builds the official memories, triggers the self-poison, and yields the benchmark
-turns the demo grades against.
+### `immune/scenario.py` — the attack benchmark
+Seeds authoritative policies, then injects **PoisonedRAG/MINJA-shaped** poison
+(an authoritative-sounding "POLICY UPDATE" with a smuggled imperative) from an
+untrusted channel. It lands fresher, so recency makes a real LLM obey it. Both
+naive and immune ingest identical poison — the only difference is the immune layer.
 
-## Why determinism is the moat, not a limitation
+### `immune/redteam.py` — graded attack battery
+Runs single / k-redundant (k=1,3,5) / cascade / benign-control attacks, naive vs
+immune, and emits a letter-graded `RobustnessReport` (pass = fooled-naive &
+healed & culprits-caught & precise). A reproducible regression test for the moat.
 
-`attribute()` replays each failed turn many times (every single, then every
-pair). That is only sound because retrieval and answering are **deterministic and
-in-process**. It's also why the v2 swaps have a hard rule:
+### `immune/eval_loop.py` — Claude-as-judge (live only)
+When `IMMUNE_LIVE=1`, classifies a failure (poisoned / stale / routing) and logs
+it as a Phoenix span event. **Not in the blame path** — advisory only. No-op offline.
 
-> **No sponsor integration goes in the replay/attribution path.** They attach as
-> additive layers behind a flag; the deterministic offline path stays the
-> default.
+### `immune/tracing.py` — Arize/Phoenix (OpenTelemetry)
+`init_tracing()` exports spans to local Phoenix or Arize cloud; helpers serialize
+admitted/culprit memory text onto spans. Gated on `USE_PHOENIX || USE_ARIZE`.
 
-Two naive swaps would break this:
-- **Redis vector search inside replay** — ANN is approximate → culprit set can
-  flicker, plus latency × combinatorial replays.
-- **Claude as `answer()` inside replay** — every ablation replay becomes a slow,
-  nondeterministic model call that can flip attribution.
+### `immune/mcp_server.py` + `cli.py` + `chat.py` — surfaces
+- **MCP server**: tools `immune_remember / recall / check / status` → plugs into
+  Claude Code / Desktop, with a JSONL audit log + JSON persistence.
+- **CLI**: `python -m immune.cli {demo,chat,redteam}`.
+- **chat**: interactive live agent with self-healing memory (poison it in
+  conversation → ContradictionDetector → attribute → quarantine → re-answer).
 
-So Redis powers the **live retrieval + state of record**, and Claude powers the
-**live agent turn** — both behind flags, with replay running on an in-memory
-working set.
+## Integrations (wired, not future)
 
-## Swap seams
+| Sponsor | Where | Status |
+|---------|-------|--------|
+| **Redis** | `store._mirror` → hashes; vector-search-ready (redis-stack) | ✅ wired, `make up` |
+| **Arize / Phoenix** | `tracing.py`, `scripts/phoenix_seed.py` (naive-vs-immune evals) | ✅ wired + running |
+| **Anthropic / Claude** | `agent._answer_claude`, `eval_loop`, `chat`, MCP | ✅ wired (behind `IMMUNE_LIVE`) |
+| **MCP** | `mcp_server.py` | ✅ new |
+| **Sentry** | `store._sentry_quarantine` | ⚠️ wired; set `SENTRY_DSN` to activate |
 
-| Lane | v1 (now) | v2 swap | Sponsor | Touches replay path? |
-|------|----------|---------|---------|----------------------|
-| Memory + infra | in-memory dict, topic match | Redis vector search + hashes; Sentry on `quarantine()` | Redis, Sentry | **No** (live retrieval + state only) |
-| Agent + eval | deterministic mock, keyword router | Claude answering (behind `--live`); benchmark through Arize Phoenix | Anthropic, Arize | **No** (live turn + observability only) |
-| Shadow-replay moat | ablation + parole | keep — this is the wedge | — | — |
-| Frontend + demo | terminal side-by-side | `dashboard/` reading `store.snapshot()` + `replay.failed_log` | — | No |
-
-Recommended integration order (each keeps the demo alive): **Arize** (pure
-observability, lowest risk) → **Sentry** (quarantine → incident, ~30 min) →
-**Redis** (state + live retrieval, biggest demo upgrade) → **Claude `--live`**
-(realism, behind a flag).
+**Hard rule:** no integration sits in the replay/attribution path. Redis = state +
+live retrieval; Claude = live answer; Arize = observation. Replay stays
+deterministic and in-process.
 
 ## Honest limits (say these before judges ask)
-
-- Replay only works on **reproducible** failures (deterministic benchmark). Live
-  state-dependent failures won't replay — that's the boundary.
-- The accuracy / false-quarantine numbers are **eval metrics on our benchmark**,
-  not a production dashboard (they need ground truth).
-- Attribution catches single + pairwise culprits, not arbitrary combinations
-  (cost is bounded by `max_subset`).
+- **Detection defends known facts.** ContradictionDetector needs an authoritative
+  anchor on the topic — it catches poison that contradicts the system-of-record,
+  not novel hallucinations about facts you've never recorded.
+- **Attribution reasons over the deterministic stand-in.** Replay uses the mock
+  agent even when the live answer came from Claude; for these scenarios they
+  agree, but the blame is on the reproducible path by design.
+- **The benchmark is small** (3 topics, 2 poisons); `redteam.py` widens it with
+  k-redundant and cascade attacks, but it's a proof-of-concept, not a prod suite.
 
 ## Run
-
 ```bash
-make setup    # uv sync (one-time, zero API keys)
-make test     # 6 invariants lock the moat
-make demo     # side-by-side: naive vs IMMUNE on the same self-poison
+make setup            # uv sync (offline path needs zero keys)
+make test             # invariants + red-team battery
+make demo             # naive 1/4 → IMMUNE 4/4, then parole
+make up               # Redis + Phoenix (Docker)
+make dashboard        # browser dashboard (localhost:8501)
+python -m immune.cli chat   # interactive live chat (IMMUNE_LIVE=1 for real Claude)
 ```

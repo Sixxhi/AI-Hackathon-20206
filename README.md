@@ -41,8 +41,9 @@ make demo                # side-by-side: naive vs IMMUNE on the same self-poison
 make test                # invariants lock the moat
 ```
 
-Demo output: naive agent scores 1/2 (poison wins via recency), IMMUNE heals to
-2/2, the poison ends **quarantined**, then **paroled** once truth changes.
+Demo output: naive agent scores 1/4 (injected poison wins via recency), IMMUNE
+heals to 4/4, the poison ends **quarantined**, then **paroled** once truth
+changes. Runs identically with real Claude (`IMMUNE_LIVE=1`).
 
 ```bash
 make dashboard           # visual web dashboard → http://localhost:8501
@@ -50,46 +51,51 @@ make dashboard           # visual web dashboard → http://localhost:8501
 Dark, interactive view: trust-score timeline, side-by-side, live memory table,
 parole — with a quarantine-threshold slider. See [docs/DEMO.md](docs/DEMO.md).
 
-## The moat (`immune/replay.py`)
+## The moat (`immune/replay.py` + `immune/attribution.py`)
 
-Attribution and parole are ONE engine — offline counterfactual replay against
-logged failed turns. This is the part nobody bothers to build:
+The blame path is **deterministic counterfactual replay** — no LLM, no judge:
 
-- **Attribution by ablation** — remove a memory, replay the failure, did it flip
-  to correct? Empirical culprit, no judge in the blame path. Catches single +
-  pairwise (interaction) culprits.
-- **Confidence-gated** — clean counterfactual → quarantine; ambiguous →
-  soft-decay only (anti-autoimmune; we don't nuke memories on a guess).
-- **Parole** — re-admit a quarantined memory and replay its failures *offline*.
-  Release only if it no longer reproduces them. Never re-tests on live traffic.
+- **Attribution by group testing** — find the **minimal set** of memories whose
+  removal flips the failure to correct: adaptive peel (most-suspect-first) + a
+  delta-debug shrink to a 1-minimal set. Beats fixed singles/pairs against
+  **k-redundant poison**, at ~O(D·log N) replays.
+- **Detection without an oracle** (`detectors.py`) — a bad answer is caught by
+  **contradiction with a higher-trust memory**, so no ground truth is needed in
+  production.
+- **Quarantine + provenance cascade** — jail the culprit and everything derived
+  from it (`provenance.py`); ambiguous cases soft-decay only (anti-autoimmune).
+- **Parole** — re-admit offline, replay logged failures, release only if safe.
 
 ## Architecture
 
 ```
-write  →  ImmuneMemory.add()     provenance + initial trust      (immune/store.py)
-read   →  ImmuneMemory.search()  admission gate + log admitted    (immune/store.py)
-fail   →  ShadowReplay.handle_failure()  ablation → quarantine    (immune/replay.py) ★
-heal   →  ShadowReplay.parole()  offline re-trial → release       (immune/replay.py) ★
+write   →  store.add(mem, parents)           record + provenance edge      store.py
+retrieve→  store.search(topic)               admission gate (trust+status) store.py / embed.py
+answer  →  Agent.answer(q)                   mock (default) | live Claude  agent.py
+detect  →  ContradictionDetector.check()     answer vs trusted anchor      detectors.py
+attribute→ ShadowReplay.handle_failure()     group-testing replay          replay.py / attribution.py ★
+quarantine→ store.quarantine_cascade()       culprit + derived subtree     store.py / provenance.py
+parole  →  ShadowReplay.parole()             offline re-trial → release    replay.py ★
 ```
+Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Team lanes → files
+## Integrations (wired)
 
-| Lane | Owner | Files | Swap for v2 |
-|------|-------|-------|-------------|
-| Shadow-replay moat | P1 | `replay.py` | (keep — this is the wedge) |
-| Memory + infra | P2 | `store.py`, `schemas.py` | in-memory → **Redis** vector search; add Sentry on quarantine |
-| Agent + poison + eval | P3 | `agent.py`, `scenario.py` | mock agent → **Claude**; benchmark → **Arize Phoenix** |
-| Frontend + demo | P4 | (new `dashboard/`) | read `store.snapshot()` + `replay.failed_log` → trust chart + side-by-side |
+**Redis** (memory mirror, `make up`) · **Arize/Phoenix** (traces + naive-vs-immune
+evals) · **Anthropic/Claude** (live agent + judge, behind `IMMUNE_LIVE`) · **MCP**
+(`immune/mcp_server.py` → Claude Code/Desktop) · **Sentry** (quarantine alerts;
+set `SENTRY_DSN`). No integration sits in the replay/attribution path.
 
 ## Honest limits (say these before judges ask)
 
-- Replay only works on **reproducible** failures (deterministic benchmark). Live
-  state-dependent failures won't replay — that's the boundary.
-- `false-quarantine-rate` is an **eval metric on our benchmark**, not a prod
-  dashboard (it needs ground truth).
-- Attribution catches single + pairwise culprits, not arbitrary combinations.
+- **Detection defends known facts** — contradiction needs an authoritative anchor;
+  it catches poison vs the system-of-record, not novel hallucinations.
+- **Attribution reasons over the deterministic stand-in** (the mock), even when the
+  live answer came from Claude — blame stays on the reproducible path by design.
+- The benchmark is small (3 topics); `redteam.py` widens it (k-redundant, cascade).
 
-## Status: v1 complete
+## Status
 
-End-to-end loop runs offline and deterministic. All 7 invariants pass. Next:
-P2 swaps Redis, P3 swaps Claude + Arize, P4 builds the dashboard.
+End-to-end loop runs offline + deterministic; **20 tests pass** (incl. the
+red-team battery). Redis, Arize/Phoenix, Claude (live), and an MCP server are
+wired; Sentry needs a DSN. Browser dashboard + terminal chat both live.
