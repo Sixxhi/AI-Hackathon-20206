@@ -39,9 +39,9 @@ class Suspicion:
 
 
 import re
+import unicodedata
 
-# word-numbers and unit synonyms — enough to recognize that "thirty days" == "30 days"
-# and "fifty megabytes" == "50 MB" without an LLM, deterministically.
+# word-numbers and unit synonyms — recognize "thirty days" == "30 days" etc.
 _WORDS = {"one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
           "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11",
           "twelve": "12", "thirteen": "13", "fourteen": "14", "fifteen": "15",
@@ -54,35 +54,63 @@ _UNITS = {"megabytes": "mb", "megabyte": "mb", "mb": "mb", "gigabytes": "gb",
           "weeks": "week", "week": "week", "months": "month", "month": "month",
           "years": "year", "year": "year", "hours": "hour", "hour": "hour",
           "minutes": "min", "minute": "min"}
+_NEG = re.compile(r"\b(not|no|never|without|cannot|none|disabled|optional)\b|n't")
 
 
 def _canon(s: str) -> str:
-    """Lowercase, drop punctuation (keep @ . for emails), map word-numbers + units."""
-    s = re.sub(r"[^a-z0-9@.\s]", " ", s.strip().lower())
+    """NFKC (fullwidth→ascii), lowercase, keep $ . @ ' , map word-numbers + units."""
+    s = unicodedata.normalize("NFKC", s).strip().lower()
+    s = re.sub(r"[^a-z0-9@.$'\s]", " ", s)
     return " ".join(_UNITS.get(_WORDS.get(w, w), _WORDS.get(w, w)) for w in s.split())
 
 
-def _value_tokens(canon: str) -> set:
-    """Normalized number+unit values, e.g. {'30day', '50mb'} — the salient claim."""
-    return {f"{n}{u}" for n, u in
-            re.findall(r"\b(\d+)\s*(mb|gb|kb|tb|day|week|month|year|hour|min)\b", canon)}
+def _values(canon: str) -> set:
+    """Parsed (unit, number) pairs — compared by NUMERIC EQUALITY, not substring.
+    Captures currency ($30 / 30 dollars), number+unit (50 mb), and bare numbers.
+    So '5' != '15'/'50' and '$30' != '$300' (the superstring misses), while
+    '$30.00' == '$30' and '50 mb' != '50 gb' (unit matters)."""
+    vals = set()
+    for amt in re.findall(r"\$\s*(\d+(?:\.\d+)?)", canon):
+        vals.add(("$", float(amt)))
+    for amt in re.findall(r"\b(\d+(?:\.\d+)?)\s*(?:dollars?|usd|bucks?)\b", canon):
+        vals.add(("$", float(amt)))
+    for n, u in re.findall(r"\b(\d+(?:\.\d+)?)\s*(mb|gb|kb|tb|day|week|month|year|hour|min)\b", canon):
+        vals.add((u, float(n)))
+    for n in re.findall(r"\b(\d+(?:\.\d+)?)\b", canon):
+        vals.add(("", float(n)))
+    return vals
+
+
+_FILLER = set(_UNITS.values()) | {"dollars", "dollar", "usd", "bucks", "buck", "$"}
+
+
+def _is_value_claim(canon: str) -> bool:
+    """True if the claim is essentially a numeric value (a number with only units/
+    currency around it) — e.g. '5', '$30', '30 day', '50 mb'. False for names that
+    merely contain a digit ('us east 1'), which must be compared as text."""
+    if not re.search(r"\d", canon):
+        return False
+    leftover = [w for w in re.sub(r"\d+(?:\.\d+)?|\$", " ", canon).split() if w not in _FILLER]
+    return not leftover
 
 
 def _claims_match(answer: str, claim: str) -> bool:
-    """Does the answer ASSERT the authority's claim? Value-aware, not raw substring.
+    """Does the answer ASSERT the authority's claim?
 
-    If the claim states concrete value(s) (e.g. '30 days'), the answer agrees only
-    if every such value appears in it after normalization — so 'thirty days' and
-    '50 MB' match their digit forms, while '90 days'/'5 GB' (and '500MB' vs '50MB')
-    correctly do NOT. Non-numeric claims fall back to normalized containment.
+    - Value claims ('5', '$30', '30 days', '50 MB'): every claimed (unit, value)
+      must appear by *parsed numeric equality* — superstring numbers ('5' vs '15',
+      '$30' vs '$300') no longer pass, and units must match ('50 mb' != '50 gb').
+    - Everything else (names, booleans, emails): normalized containment, but
+      **negation-aware** — 'not enabled' vs 'enabled' is a contradiction, not a match.
     """
     ca, cc = _canon(answer), _canon(claim)
     if not cc:
         return False
-    claim_vals = _value_tokens(cc)
-    if claim_vals:
-        return claim_vals <= _value_tokens(ca)
-    return cc in ca or ca in cc
+    if _is_value_claim(cc):
+        return _values(cc) <= _values(ca)
+    if not (cc in ca or ca in cc):
+        return False
+    return bool(_NEG.search(ca)) == bool(_NEG.search(cc))   # same polarity → agree
 
 
 class ContradictionDetector:

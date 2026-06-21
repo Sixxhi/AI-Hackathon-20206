@@ -354,3 +354,33 @@ def test_detector_word_number_days():
     det = ContradictionDetector(s)
     assert not det.check("You get a full thirty days to return.", [aid])  # agrees
     assert det.check("You get ninety days.", [aid])                       # contradicts
+
+
+def test_detector_numeric_superstring_caught():
+    """R5 NEW-1: '15'/'50' must NOT 'match' '5' (parsed equality, not substring)."""
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("5", topic="retries")
+    det = ContradictionDetector(s)
+    assert det.check("15", [aid]) and det.check("50", [aid])
+    assert not det.check("5", [aid]) and not det.check("the limit is 5", [aid])
+    s2, a2 = _anchor_store("$30", topic="fee")
+    assert ContradictionDetector(s2).check("$300", [a2])      # $300 != $30
+    assert not ContradictionDetector(s2).check("$30.00", [a2])  # decimal equal
+
+
+def test_detector_negation_aware():
+    """R5 NEW-2: 'not enabled' contains 'enabled' but must read as contradiction."""
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("enabled", topic="tls")
+    det = ContradictionDetector(s)
+    assert det.check("TLS is not enabled", [aid])
+    assert not det.check("TLS is enabled", [aid])
+
+
+def test_detector_named_entity_with_digit_not_regressed():
+    """Numeric-equality must not swallow names that merely contain a digit."""
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("us-east-1", topic="region")
+    det = ContradictionDetector(s)
+    assert det.check("eu-west-1", [aid])        # both contain '1' but differ
+    assert not det.check("us-east-1", [aid])

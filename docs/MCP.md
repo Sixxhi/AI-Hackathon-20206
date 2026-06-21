@@ -119,6 +119,11 @@ sessions (defends the cross-session persistence threat).
   questions.
 - **Parole isn't on the MCP surface yet.** Through these tools, quarantine is
   one-way; the offline parole re-trial lives in the core engine/benchmark.
+- **Colluding / reasoning-derived poison isn't attributed.** Deterministic
+  attribution catches memories that *directly assert* the wrong value; a wrong
+  value that only *emerges from combining* two innocuous memories is flagged
+  (`action: review`) but not quarantined. A fundamental limit of replay-based
+  attribution — the optional LLM layer would be needed to reach it.
 
 ## What it's genuinely good for today
 Auditable, persistent, trust-scored memory for **short factual values you
