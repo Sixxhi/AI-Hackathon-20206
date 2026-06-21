@@ -1,5 +1,12 @@
 # Redis integration runbook (P2)
 
+> ✅ **Status: implemented.** Recall runs real RediSearch vector search
+> (`FT.SEARCH … KNN`, FLAT/COSINE) in [`immune/redis_index.py`](../immune/redis_index.py);
+> memories are mirrored with FLOAT32 embeddings and quarantine is enforced at the
+> index (`@status:{active}`). See it live in [FIREWALL.md](FIREWALL.md) /
+> `make demo-firewall`. The sections below are the original planning notes
+> (RedisVL etc. were design options; the shipped path is raw `FT.*`).
+
 Redis is the memory store for IMMUNE: it holds `MemoryRecord`s (text, provenance,
 trust/risk, quarantine status) and powers **live retrieval** via vector search.
 

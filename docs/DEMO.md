@@ -6,6 +6,11 @@ silently corrupts future answers. IMMUNE traces *which* memory caused a bad
 answer (by deterministic replay), drops its trust, **quarantines** repeat
 offenders, and **paroles** them if they're later proven safe again.
 
+> 👉 **The headline demo is now the memory firewall** — a real Claude agent on
+> Redis vector memory, poisoned and healed live: [FIREWALL.md](FIREWALL.md) /
+> `make demo-firewall`. This doc covers the offline side-by-side (`make demo`),
+> still the deterministic, can't-fail baseline.
+
 Full concept: [CONCEPT.md](CONCEPT.md). How it's built: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---

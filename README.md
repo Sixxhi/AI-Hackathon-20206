@@ -23,7 +23,8 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 
 ## Docs
 
-- [docs/DEMO.md](docs/DEMO.md) — **what the app does & how to use it**: run modes, annotated output, the pitch.
+- [docs/FIREWALL.md](docs/FIREWALL.md) — **the headline demo**: Claude agent + Redis memory firewall, run modes, sponsor map, the pitch script.
+- [docs/DEMO.md](docs/DEMO.md) — the side-by-side naive-vs-IMMUNE demo: run modes, annotated output.
 - [docs/SETUP.md](docs/SETUP.md) — set up the whole stack (uv, env, LLM, Redis, Arize, Sentry).
 - [docs/CONCEPT.md](docs/CONCEPT.md) — the full idea, problem, demo story, scope, and track/sponsor fit.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, data flow, the ablation engine, and the v2 swap seams.
@@ -33,6 +34,21 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 - [docs/MCP.md](docs/MCP.md) — plug IMMUNE into Claude Code as an MCP server (`claude mcp add` + scripted demo).
 - [docs/REDIS.md](docs/REDIS.md) — Redis integration runbook (P2): setup paths, vector search, Sentry on quarantine.
 - [TEAM.md](TEAM.md) — onboarding and per-lane ownership.
+
+## The headline demo — a memory firewall (Claude + Redis)
+
+IMMUNE is a **firewall for agent memory**: it sits on the read/write path,
+provenance-tags every write, and quarantines poison so it can't be retrieved.
+The flagship demo runs a **real Claude agent** whose memory is **Redis vector
+search**, gets it poisoned, and heals it — live.
+
+```bash
+make demo-firewall            # live: real Claude + Redis; needs ANTHROPIC_API_KEY + Redis (make up)
+make demo-firewall-offline    # deterministic, zero network — the can't-fail backup
+```
+You watch the Redis index reject the attack: **3 active → 4 (poison RETRIEVABLE)
+→ 3 (poison not served)** the instant the culprit is quarantined; a Sentry
+incident fires on quarantine. Full runbook + pitch: [docs/FIREWALL.md](docs/FIREWALL.md).
 
 ## Run (zero deps, zero API keys)
 
@@ -82,10 +98,14 @@ Full detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Integrations (wired)
 
-**Redis** (memory mirror, `make up`) · **Arize/Phoenix** (traces + naive-vs-immune
-evals) · **Anthropic/Claude** (live agent + judge, behind `IMMUNE_LIVE`) · **MCP**
-(`immune/mcp_server.py` → Claude Code/Desktop) · **Sentry** (quarantine alerts;
-set `SENTRY_DSN`). No integration sits in the replay/attribution path.
+**Redis** (real vector search — RediSearch KNN drives recall; quarantine enforced
+at the index via `@status:{active}`; `make up`) · **Anthropic/Claude** (live agent
+behind `IMMUNE_LIVE`) · **Arize/Phoenix** (traces + naive-vs-immune evals) ·
+**Sentry** (quarantine → triaged incident; set `SENTRY_DSN`) · **MCP**
+(`immune/mcp_server.py` → Claude Code/Desktop) · **LangGraph** (secondary —
+`ImmuneStore` is a drop-in `BaseStore`, `immune/langgraph_store.py`). The
+replay/attribution moat stays in-memory and deterministic — no integration sits
+in the blame path.
 
 ## Honest limits (say these before judges ask)
 
@@ -97,6 +117,9 @@ set `SENTRY_DSN`). No integration sits in the replay/attribution path.
 
 ## Status
 
-End-to-end loop runs offline + deterministic; **20 tests pass** (incl. the
-red-team battery). Redis, Arize/Phoenix, Claude (live), and an MCP server are
-wired; Sentry needs a DSN. Browser dashboard + terminal chat both live.
+End-to-end loop runs offline + deterministic; **44 tests pass** (incl. the
+red-team battery, the LangGraph `BaseStore` drop-in, and Redis-gated vector
+search). The headline demo (`make demo-firewall`) runs a real Claude agent on
+Redis vector memory and self-heals live. Redis vector search, Arize/Phoenix,
+Claude (live), MCP, and Sentry are wired; Sentry needs a DSN. Browser dashboard +
+terminal chat both live.
