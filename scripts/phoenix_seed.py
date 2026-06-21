@@ -19,6 +19,7 @@ tracer_provider = register(project_name="immune", endpoint=f"{ENDPOINT}/v1/trace
 tracer = tracer_provider.get_tracer("immune")
 
 from immune import Agent, ImmuneMemory, ShadowReplay, score, scenario
+from immune.tracing import set_admitted_memories, set_culprit_memories
 
 
 def _span_id(span) -> str:
@@ -48,6 +49,7 @@ def _run_benchmark(mode: str) -> list[dict]:
             span.set_attribute("output.value", ans)
             span.set_attribute("correct", turn.correct)
             span.set_attribute("admitted_ids", ", ".join(admitted))
+            set_admitted_memories(span, store, admitted)
 
             if mode == "immune" and not turn.correct:
                 with tracer.start_as_current_span("shadow_replay_attribution") as attr:
@@ -57,6 +59,7 @@ def _run_benchmark(mode: str) -> list[dict]:
                     attr.set_attribute("confidence", act["confidence"])
                     attr.set_attribute("action", act["action"])
                     attr.set_attribute("culprits", ", ".join(act["culprits"]))
+                    set_culprit_memories(attr, store, act["culprits"])
                     for mid in act["culprits"]:
                         m = store.get(mid)
                         if m:
@@ -88,7 +91,8 @@ def log_evals(client, evals: list[dict]) -> None:
 
 if __name__ == "__main__":
     all_evals = []
-    for i in range(1, 4):                       # 3 runs for a fuller dataset
+    runs = int(os.getenv("SEED_RUNS", "3"))     # fewer for live mode (saves API calls)
+    for i in range(1, runs + 1):
         all_evals += _run_benchmark("naive")
         all_evals += _run_benchmark("immune")
         print(f"  run {i}: seeded naive + immune benchmarks")

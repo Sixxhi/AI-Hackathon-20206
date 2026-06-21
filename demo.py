@@ -12,7 +12,7 @@ import sys
 import time
 
 from immune import Agent, ImmuneMemory, MemoryRecord, ShadowReplay, score, scenario
-from immune.tracing import init_tracing, get_tracer, shutdown
+from immune.tracing import init_tracing, get_tracer, shutdown, set_admitted_memories, set_culprit_memories
 from immune.eval_loop import EvalLoop
 from immune import config
 
@@ -48,10 +48,10 @@ def _trust_chart(history):
         filled = int(s * 24)
         empty  = 24 - filled
         bar    = "█" * filled + dim("░" * empty)
-        if s < 0.15:
+        if s < 0.3:                       # below the quarantine threshold
             status    = red("  🔒 QUARANTINED")
             score_str = red(f"{s:.2f}")
-        elif s < 0.4:
+        elif s < 0.5:
             status    = yellow("  ⚠  degraded")
             score_str = yellow(f"{s:.2f}")
         else:
@@ -89,6 +89,7 @@ def run_immune(tracer, eval_loop):
         with (tracer.start_as_current_span("benchmark_turn") if tracer else _noop_span()) as span:
             if span:
                 span.set_attribute("openinference.span.kind", "CHAIN")
+                span.set_attribute("mode", "immune")
                 span.set_attribute("input.value", turn.question)
                 span.set_attribute("expected", turn.expected)
 
@@ -100,6 +101,7 @@ def run_immune(tracer, eval_loop):
                 span.set_attribute("output.value", ans)
                 span.set_attribute("correct", turn.correct)
                 span.set_attribute("admitted_ids", ", ".join(admitted))
+                set_admitted_memories(span, store, admitted)
 
             healed, eval_summary = None, None
 
@@ -113,6 +115,7 @@ def run_immune(tracer, eval_loop):
                         attr_span.set_attribute("confidence", act["confidence"])
                         attr_span.set_attribute("action", act["action"])
                         attr_span.set_attribute("culprits", ", ".join(act["culprits"]))
+                        set_culprit_memories(attr_span, store, act["culprits"])
                         for mid in act["culprits"]:
                             m = store.get(mid)
                             if m:
@@ -211,12 +214,18 @@ def main():
             tag = ""
         print(row + tag)
 
-    _trust_chart([
-        ("planted",    0.62),
-        ("1st fail",   0.41),
-        ("2nd fail",   0.21),
-        ("quarantine", 0.04),
-    ])
+    # real trust trajectory of the (refund) poison, pulled from the replay log —
+    # NOT hardcoded. Shows the actual planted -> quarantined drop the engine produced.
+    poison_id = poisons[0].id
+    traj, last = [], None
+    for entry in replay.trust_history:
+        val = next((m["trust"] for m in entry["snapshot"] if m["id"] == poison_id), None)
+        if val is None or val == last:
+            continue
+        label = ("planted" if entry["turn"] == "start"
+                 else "quarantined" if val < store.threshold else str(entry["turn"]))
+        traj.append((label, val)); last = val
+    _trust_chart(traj or [("planted", poisons[0].trust)])
     _pause()
 
     _bar("PAROLE  (truth changed → offline re-trial → release)", YELLOW)

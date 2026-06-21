@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from immune import Agent, ImmuneMemory, MemoryRecord, ShadowReplay, score, scenario
+from immune import config
 
 # --- palette (Ddoski colour template) ----------------------------------------
 BG        = "#2e3339"   # charcoal blue
@@ -183,9 +184,15 @@ with st.sidebar:
     st.caption("Trust below the threshold → the memory is jailed. Drag it and watch "
                "the timeline and verdict change.")
     st.markdown("---")
-    st.markdown(f"<span class='ksub'>Mode</span><br><span class='badge a'>OFFLINE · "
-                f"DETERMINISTIC</span>", unsafe_allow_html=True)
-    st.caption("Same engine as `make demo`. No API keys, no network.")
+    if config.USE_CLAUDE:
+        st.markdown(f"<span class='ksub'>Mode</span><br><span class='badge q'>LIVE · "
+                    f"{config.AGENT_MODEL}</span>", unsafe_allow_html=True)
+        st.caption("Real Claude answers from retrieved memory. Attribution stays "
+                   "deterministic (replay). Slower — each run hits the API.")
+    else:
+        st.markdown(f"<span class='ksub'>Mode</span><br><span class='badge a'>OFFLINE · "
+                    f"DETERMINISTIC</span>", unsafe_allow_html=True)
+        st.caption("Same engine as `make demo`. No API keys, no network.")
 
 r = run_scenario(threshold)
 n = len(r["imm_rows"])

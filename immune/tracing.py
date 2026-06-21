@@ -10,10 +10,47 @@ auto-captures every Anthropic call as a child span inside your manual spans.
 """
 from __future__ import annotations
 
+import json
+from typing import TYPE_CHECKING, Iterable
+
 from . import config
+
+if TYPE_CHECKING:
+    from .store import ImmuneMemory
 
 _provider = None
 _tracer = None
+
+
+def memory_records_json(store: "ImmuneMemory", mem_ids: Iterable[str]) -> str:
+    """Serialize memory contents for span attributes (visible in Phoenix UI)."""
+    rows = []
+    for mid in mem_ids:
+        m = store.get(mid)
+        if m:
+            rows.append({
+                "id": m.id,
+                "text": m.text,
+                "answer": m.answer,
+                "source": m.source,
+                "trust": round(m.trust, 3),
+                "status": m.status,
+            })
+    return json.dumps(rows)
+
+
+def set_admitted_memories(span, store: "ImmuneMemory", mem_ids: Iterable[str]) -> None:
+    """Log full admitted-memory contents on a turn span."""
+    if span is None or not mem_ids:
+        return
+    span.set_attribute("admitted_memories", memory_records_json(store, mem_ids))
+
+
+def set_culprit_memories(span, store: "ImmuneMemory", culprit_ids: Iterable[str]) -> None:
+    """Log quarantined memory text on the attribution span."""
+    if span is None or not culprit_ids:
+        return
+    span.set_attribute("culprit_memories", memory_records_json(store, culprit_ids))
 
 
 def init_tracing() -> bool:
