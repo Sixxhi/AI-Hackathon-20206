@@ -21,7 +21,6 @@ The server starts **clean** — no demo facts — and writes state under `~/.imm
 ```bash
 IMMUNE_HOME=~/.immune                 # state dir (store.json + record.jsonl) — not the cwd
 IMMUNE_OFFICIAL_PATH=~/.immune/official.json   # YOUR system-of-record (trusted anchors)
-IMMUNE_ADMIN_TOKEN=<secret>           # enables the operator immune_register_official tool
 ANTHROPIC_API_KEY=<key>               # only if you use live answers; check/recall don't need it
 # IMMUNE_DEMO_SEED=1                   # opt-in: load the refund/shipping/warranty demo facts
 ```
@@ -41,21 +40,23 @@ Without `IMMUNE_DEMO_SEED`, a fresh server has **only** your `official.json` anc
 | `immune_check(query, answer)` | if the answer contradicts a *trusted* memory, attribute the culprit by deterministic replay and quarantine it. If nothing is attributable, it only **flags for review** — it does not overwrite your answer. |
 | `immune_status()` | current memory: active vs quarantined, with trust scores |
 
-**Trust is operator-established, not agent-asserted** — and there are two
-out-of-band ways an operator sets the system-of-record (an attacker driving the
-agent tools can do neither):
+**Trust is operator-established, not agent-asserted.** There is deliberately **no
+register-official tool** on the agent surface — the agent fills every tool
+argument, so any admin token passed as an argument would have to live in the
+agent's context (readable by a poisoned agent, and written to the audit log),
+which would re-open the very spoof we closed. So the system-of-record is set only
+through channels the agent never mediates:
 
 ```bash
-# (a) config file, loaded as trusted at server startup (recommended)
+# (a) startup file, loaded as trusted when the server boots (recommended)
 export IMMUNE_OFFICIAL_PATH=~/.immune/official.json   # [{"text","answer","topic"}, ...]
 
-# (b) the operator-only tool, gated by a server secret the agent never sees
-export IMMUNE_ADMIN_TOKEN=$(openssl rand -hex 16)
-#   immune_register_official(text, answer, topic, admin_token_arg=<token>)
+# (b) operator CLI — writes IMMUNE_STORE_PATH; restart the server to load it
+immune register-official "Official: the max upload size is 50 MB." --answer "50 MB" --topic upload
 ```
-This is what makes the threat model hold: an attacker writing through
-`immune_remember` cannot label their poison "official," and cannot call
-`register_official` without the operator's token.
+The agent sees exactly the four tools above; trust configuration is **physically
+unreachable** by it. An attacker writing through `immune_remember` cannot label
+poison "official" (it's downgraded to user/0.5).
 
 The blame path stays deterministic: `check()` attributes by replay over structured
 memory — **no model judges who is guilty**.

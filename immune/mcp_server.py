@@ -91,8 +91,12 @@ class Engine:
     def _save(self) -> None:
         try:
             os.makedirs(os.path.dirname(_STORE_PATH) or ".", exist_ok=True)
+            # Persist the FULL record — snapshot() omits answer/topic, which the
+            # detector needs, so a restored anchor must keep its crisp `answer`.
             with open(_STORE_PATH, "w") as f:
-                json.dump(self.store.snapshot(), f)
+                json.dump([{"text": m.text, "topic": m.topic, "answer": m.answer,
+                            "source": m.source, "trust": m.trust, "status": m.status}
+                           for m in self.store.all()], f)
         except Exception:
             pass
 
@@ -205,20 +209,14 @@ def build_server():
         """Show current memory: active vs quarantined, with trust scores."""
         return engine.status()
 
-    admin_token = os.getenv("IMMUNE_ADMIN_TOKEN", "")
-
-    @mcp.tool()
-    def immune_register_official(text: str, answer: str = "", topic: str = "general",
-                                 admin_token_arg: str = "") -> dict:
-        """OPERATOR-ONLY: register a system-of-record fact (an anchor `check` defends).
-        Requires the server's IMMUNE_ADMIN_TOKEN — so an agent/attacker driving these
-        tools cannot forge trust. Operators can also seed anchors via IMMUNE_OFFICIAL_PATH.
-        """
-        if not admin_token or admin_token_arg != admin_token:
-            return {"error": "register_official requires the operator IMMUNE_ADMIN_TOKEN "
-                             "(set out-of-band on the server). Trust is not agent-assertable."}
-        return engine.register_official(text, answer=answer, topic=topic)
-
+    # NOTE: there is deliberately NO register-official TOOL. Trust must not be
+    # agent-assertable, and the agent fills every tool argument — so any token
+    # passed as a tool arg would have to live in the agent's context, where a
+    # poisoned agent could read it (reopening the spoof) and where it leaks into
+    # the audit log. The system-of-record is configured ONLY out-of-band, through
+    # channels the agent never mediates: the IMMUNE_OFFICIAL_PATH startup file, or
+    # the `immune register-official` admin CLI (writes IMMUNE_STORE_PATH). The agent
+    # sees exactly four tools: remember / recall / check / status.
     return mcp
 
 

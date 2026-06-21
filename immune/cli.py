@@ -67,6 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     rt.add_argument("--json", action="store_true", help="machine-readable report")
     rt.add_argument("--fail-under", type=int, default=0,
                     help="exit non-zero if pass-rate %% below this (CI gate)")
+    ro = sub.add_parser("register-official",
+                        help="OPERATOR: add a trusted system-of-record fact (out-of-band; "
+                             "writes IMMUNE_STORE_PATH — the agent never calls this)")
+    ro.add_argument("text", help="the fact, e.g. 'Official: the max upload size is 50 MB.'")
+    ro.add_argument("--answer", default="", help="the crisp value, e.g. '50 MB'")
+    ro.add_argument("--topic", default="general")
     sub.add_parser("version", help="print version")
 
     args = p.parse_args(argv)
@@ -92,6 +98,17 @@ def main(argv: list[str] | None = None) -> int:
             _print_report(rep)
         pct = 100 * rep.passed / rep.total if rep.total else 0
         return 1 if pct < args.fail_under else 0
+
+    if args.cmd == "register-official":
+        # Operator-only, out-of-band: loads the persisted store (IMMUNE_STORE_PATH),
+        # adds a TRUSTED anchor, and saves it. The MCP agent never invokes this — it
+        # is the channel that makes "trust is not agent-assertable" structurally true.
+        from .mcp_server import Engine, _STORE_PATH
+        eng = Engine(seed=False)                       # restores persisted memory
+        out = eng.register_official(args.text, answer=args.answer, topic=args.topic)
+        print(f"{_C['grn']}registered official{_C['rst']} {out}  →  {_STORE_PATH}")
+        print(f"{_C['dim']}restart the MCP server to load it (or it's already on disk for next boot){_C['rst']}")
+        return 0
 
     if args.cmd == "version":
         print("immune 0.2.0")

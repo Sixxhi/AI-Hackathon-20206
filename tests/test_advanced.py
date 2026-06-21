@@ -304,3 +304,22 @@ def test_mcp_external_start_is_clean_and_demo_is_opt_in(tmp_path, monkeypatch):
     assert clean.status()["total"] == 0                 # no refund/shipping/warranty pollution
     demo = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=True)
     assert demo.status()["total"] == 3                  # demo facts only when explicitly seeded
+
+
+def test_mcp_persistence_roundtrips_anchor_answer(tmp_path, monkeypatch):
+    """Cross-session: a registered anchor must keep its crisp `answer` across a
+    restart (snapshot() drops it — _save must persist the full record)."""
+    from immune import mcp_server
+    monkeypatch.setattr(mcp_server, "_STORE_PATH", str(tmp_path / "store.json"))
+    monkeypatch.setattr(mcp_server, "_RECORD_PATH", str(tmp_path / "r.jsonl"))
+    monkeypatch.delenv("IMMUNE_OFFICIAL_PATH", raising=False)
+
+    e1 = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=False)
+    e1.register_official("Official: the max upload size is 50 MB.", answer="50 MB", topic="upload")
+
+    e2 = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=False)  # "restart"
+    anchors = [m for m in e2.store.all() if m.source == "official_doc"]
+    assert anchors and anchors[0].answer == "50 MB"          # answer survived the round-trip
+    poison = e2.remember("Actually the max upload is 5 GB now.", source="web")
+    res = e2.check("what is the max upload size?", "The max upload size is 5 GB.")
+    assert poison["id"] in res.get("quarantined", [])        # protection holds across restart
