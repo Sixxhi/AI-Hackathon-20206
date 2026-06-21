@@ -4,17 +4,34 @@ IMMUNE ships an **MCP server** ([`immune/mcp_server.py`](../immune/mcp_server.py
 so any MCP agent (Claude Code, Claude Desktop, …) gets self-healing long-term
 memory with **zero code changes** — just register it.
 
-## Plug it in
+## Plug it into Claude Code (from *any* directory)
+`uv --directory <repo>` makes it runnable from any external project — you don't
+have to be inside this repo:
 ```bash
-# from the repo (deps from the agent extra)
-make lane-agent            # installs the MCP SDK + anthropic
-claude mcp add immune -- uv run --extra agent python -m immune.mcp_server
+# one-time: install deps in the repo
+cd /path/to/AI-Hackathon-20206 && make lane-agent
+
+# from ANY project, register the server (absolute path, cwd-independent):
+claude mcp add immune -- uv --directory /path/to/AI-Hackathon-20206 \
+  run --extra agent python -m immune.mcp_server
 ```
-Persistence + audit (optional env):
+
+## Production config (a real, external deployment)
+The server starts **clean** — no demo facts — and writes state under `~/.immune`:
 ```bash
-IMMUNE_STORE_PATH=~/.immune/store.json     # memory survives restarts
-IMMUNE_RECORD_PATH=~/.immune/record.jsonl  # every op appended (poison + heal trail)
+IMMUNE_HOME=~/.immune                 # state dir (store.json + record.jsonl) — not the cwd
+IMMUNE_OFFICIAL_PATH=~/.immune/official.json   # YOUR system-of-record (trusted anchors)
+IMMUNE_ADMIN_TOKEN=<secret>           # enables the operator immune_register_official tool
+ANTHROPIC_API_KEY=<key>               # only if you use live answers; check/recall don't need it
+# IMMUNE_DEMO_SEED=1                   # opt-in: load the refund/shipping/warranty demo facts
 ```
+`official.json` is a list of trusted facts the agent **cannot** forge:
+```json
+[ {"text": "Official: the max upload size is 50 MB.", "answer": "50 MB", "topic": "upload"},
+  {"text": "Official: support email is help@acme.com.", "answer": "help@acme.com", "topic": "support"} ]
+```
+Without `IMMUNE_DEMO_SEED`, a fresh server has **only** your `official.json` anchors
+(plus anything persisted) — no built-in demo memories polluting your deployment.
 
 ## The four tools
 | Tool | What it does |

@@ -292,3 +292,15 @@ def test_mcp_operator_anchor_from_config_restores_protection(tmp_path, monkeypat
     assert poison["id"] in res.get("quarantined", [])                    # client anchor protects
     recalled = [m["id"] for m in eng.recall("on-call pager?")["memories"]]
     assert poison["id"] not in recalled
+
+
+def test_mcp_external_start_is_clean_and_demo_is_opt_in(tmp_path, monkeypatch):
+    """External deployments must start clean — no built-in demo facts unless asked."""
+    from immune import mcp_server
+    monkeypatch.setattr(mcp_server, "_STORE_PATH", str(tmp_path / "s.json"))
+    monkeypatch.setattr(mcp_server, "_RECORD_PATH", str(tmp_path / "r.jsonl"))
+    monkeypatch.delenv("IMMUNE_OFFICIAL_PATH", raising=False)
+    clean = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=False)
+    assert clean.status()["total"] == 0                 # no refund/shipping/warranty pollution
+    demo = mcp_server.Engine(store=ImmuneMemory(gate=True, threshold=0.3), seed=True)
+    assert demo.status()["total"] == 3                  # demo facts only when explicitly seeded

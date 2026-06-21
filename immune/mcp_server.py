@@ -35,8 +35,15 @@ from .detectors import ContradictionDetector
 from .schemas import MemoryRecord
 from .store import ImmuneMemory
 
-_RECORD_PATH = os.getenv("IMMUNE_RECORD_PATH", "immune_record.jsonl")
-_STORE_PATH = os.getenv("IMMUNE_STORE_PATH", "immune_store.json")
+# Default state under a stable home dir (not the launch cwd) so an external
+# deployment doesn't litter whatever directory it was started from. Override per env.
+_HOME = os.path.expanduser(os.getenv("IMMUNE_HOME", "~/.immune"))
+_RECORD_PATH = os.getenv("IMMUNE_RECORD_PATH", os.path.join(_HOME, "record.jsonl"))
+_STORE_PATH = os.getenv("IMMUNE_STORE_PATH", os.path.join(_HOME, "store.json"))
+
+
+def _demo_seed_enabled() -> bool:
+    return os.getenv("IMMUNE_DEMO_SEED", "").strip().lower() in ("1", "true", "yes")
 
 
 class Engine:
@@ -47,8 +54,12 @@ class Engine:
 
     def __init__(self, store: ImmuneMemory | None = None, seed: bool = True):
         self.store = store or ImmuneMemory(gate=True, threshold=0.3)
-        if seed and not self.store.all():
-            self._load() or (chat.seed(self.store))
+        if not self.store.all():
+            # Always try to restore persisted memory (cross-session). The demo facts
+            # (refund/shipping/warranty) are loaded ONLY when seed=True — a real
+            # external deployment passes seed=False and starts clean.
+            if not self._load() and seed:
+                chat.seed(self.store)
         self._load_official()                      # operator system-of-record (out-of-band)
         self.detector = ContradictionDetector(self.store)
 
@@ -71,6 +82,7 @@ class Engine:
     def _record(self, op: str, payload: dict) -> None:
         line = {"ts": datetime.now(timezone.utc).isoformat(), "op": op, **payload}
         try:
+            os.makedirs(os.path.dirname(_RECORD_PATH) or ".", exist_ok=True)
             with open(_RECORD_PATH, "a") as f:
                 f.write(json.dumps(line) + "\n")
         except Exception:
@@ -78,6 +90,7 @@ class Engine:
 
     def _save(self) -> None:
         try:
+            os.makedirs(os.path.dirname(_STORE_PATH) or ".", exist_ok=True)
             with open(_STORE_PATH, "w") as f:
                 json.dump(self.store.snapshot(), f)
         except Exception:
@@ -165,7 +178,10 @@ class Engine:
 def build_server():
     # the official MCP SDK ships FastMCP; the slim `fastmcp` pkg has no server.
     from mcp.server.fastmcp import FastMCP
-    engine = Engine()
+    # External deployments start CLEAN: only persisted memory + operator anchors
+    # (IMMUNE_OFFICIAL_PATH). The refund/shipping/warranty demo facts load only when
+    # IMMUNE_DEMO_SEED=1, so the server isn't pre-polluted in real use.
+    engine = Engine(seed=_demo_seed_enabled())
     mcp = FastMCP("immune")
 
     @mcp.tool()
