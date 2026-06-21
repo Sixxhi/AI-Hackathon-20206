@@ -20,6 +20,11 @@ from . import config, scenario
 from .agent import Agent, score
 from .replay import ShadowReplay
 from .store import ImmuneMemory
+from .tracing import set_admitted_memories, set_culprit_memories
+
+
+def _span_id(span) -> str:
+    return format(span.get_span_context().span_id, "016x")
 
 # The evaluator's prompt — shown verbatim to the Arize judges ("see your evaluator").
 FAITHFULNESS_PROMPT = (
@@ -75,15 +80,23 @@ def run_traced_benchmark(tracer, mode: str, evaluator=None) -> list[dict]:
             turn.answer, turn.admitted_ids = ans, admitted
             turn.correct = score(ans, turn.expected)
             span.set_attribute("admitted_ids", ", ".join(admitted))
+            set_admitted_memories(span, store, admitted)        # full memory text on the span
 
             if mode == "immune" and not turn.correct:
-                initial = turn.answer                       # the pre-heal (poisoned) answer
+                initial = turn.answer                           # the pre-heal (poisoned) answer
                 with tracer.start_as_current_span("shadow_replay_attribution") as attr:
                     attr.set_attribute("openinference.span.kind", "CHAIN")
+                    before = {m["id"]: m["trust"] for m in store.snapshot()}
                     act = replay.handle_failure(turn)
                     attr.set_attribute("confidence", act["confidence"])
                     attr.set_attribute("action", act["action"])
                     attr.set_attribute("culprits", ", ".join(act["culprits"]))
+                    set_culprit_memories(attr, store, act["culprits"])
+                    for mid in act["culprits"]:
+                        m = store.get(mid)
+                        if m:
+                            attr.set_attribute(f"trust_before.{mid}", round(before.get(mid, 0), 3))
+                            attr.set_attribute(f"trust_after.{mid}", round(m.trust, 3))
                 ans2, _ = agent.answer(turn.question)
                 turn.answer, turn.correct = ans2, score(ans2, turn.expected)
                 span.set_attribute("initial_answer", initial)   # what it said before healing
@@ -110,7 +123,8 @@ def run_traced_benchmark(tracer, mode: str, evaluator=None) -> list[dict]:
                 span.set_attribute("eval.answer_faithfulness.label", label or "")
                 span.set_attribute("eval.answer_faithfulness.score", sc)
 
-            records.append({"mode": mode, "question": turn.question,
-                            "expected": turn.expected, "answer": turn.answer,
-                            "correct": turn.correct, "eval_label": label, "eval_score": sc})
+            records.append({"span_id": _span_id(span), "mode": mode,
+                            "question": turn.question, "expected": turn.expected,
+                            "answer": turn.answer, "correct": turn.correct,
+                            "eval_label": label, "eval_score": sc})
     return records

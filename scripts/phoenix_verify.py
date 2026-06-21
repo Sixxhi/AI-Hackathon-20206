@@ -15,7 +15,7 @@ TURN_ATTRS = {
     "input.value", "output.value", "expected", "correct", "mode",
     "admitted_ids", "admitted_memories",
 }
-TURN_HEAL_ATTRS = {"healed_answer", "healed_correct"}
+TURN_HEAL_ATTRS = {"initial_answer", "healed_correct"}   # new shape: output.value = final answer
 ATTR_ATTRS = {
     "confidence", "action", "culprits", "culprit_memories",
     "trust_before", "trust_after",
@@ -62,10 +62,14 @@ def main() -> int:
         if missing:
             errors.append(f"benchmark_turn ({mode}) missing: {sorted(missing)}")
 
-    # admitted_memories must parse as JSON with text field
-    immune_fails = turns[(turns["attributes.mode"] == "immune") & (turns["attributes.correct"] == False)]
+    # healed turns are marked by the `healed` attribute (correct is now the FINAL value)
+    if "attributes.healed" in turns.columns:
+        immune_fails = turns[(turns["attributes.mode"] == "immune")
+                             & (turns["attributes.healed"] == True)]  # noqa: E712
+    else:
+        immune_fails = turns.iloc[0:0]
     if immune_fails.empty:
-        errors.append("no immune failure turns (expected at least warranty/refund heals)")
+        errors.append("no healed immune turns (expected at least warranty/refund heals)")
     else:
         row = immune_fails.iloc[0]
         a = _attrs(row)
