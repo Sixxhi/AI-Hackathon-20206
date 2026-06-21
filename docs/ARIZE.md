@@ -38,6 +38,38 @@ So the pitch to the Arize booth becomes:
 This satisfies all five criteria **without** compromising the moat. Keep the
 evaluator out of the attribution step.
 
+## 🏆 Booth deliverable — push the prize artifacts to Arize AX cloud
+
+The Arize prize is judged **at their booth, in your Arize account** — they look for
+traces + feedback, your evaluator, and how you used it to improve the app. One command
+puts all three in the cloud project `immune`:
+
+```bash
+make arize-report          # uv run --extra agent --env-file .env python scripts/arize_report.py
+# needs ARIZE_API_KEY + ARIZE_SPACE_ID (AX cloud) and ANTHROPIC_API_KEY (the judge)
+```
+
+What lands in AX (verified via `ax spans export`):
+- **Traces** — `benchmark_turn` spans per question, `shadow_replay_attribution` child
+  spans (culprit, confidence, action), and the judge's own `LLM` calls (auto-instrumented).
+- **Evaluator** — `answer_faithfulness`, a **`phoenix.evals` ClassificationEvaluator**
+  (LLM-as-judge, prompt in [`immune/observability.py`](../immune/observability.py)) that
+  scores each answer `faithful`/`unfaithful` vs the authoritative policy, with an
+  explanation — visible as `eval.answer_faithfulness.{label,score}` on every turn.
+- **Improvement** — every turn is tagged `mode=naive|immune`; filter by it and the
+  evaluator's **faithful-rate lifts 25% → 100%**. (A formal Experiments run needs the
+  `arize[Datasets]` extra, absent here; the `mode`-tagged comparison is the same artifact.)
+
+**Booth talking point:** *"Arize's evaluator (answer_faithfulness, an LLM judge) flags
+the agent's answer as unfaithful to our system-of-record. That feedback is the signal
+our immune layer acts on — it attributes the culprit memory by deterministic replay and
+quarantines it. Re-run, and the evaluator scores the agent 25% → 100% faithful. Here are
+the traces, the evaluator with its verdicts, and the before/after — all in Arize."*
+
+> The evaluator is **observability/feedback only** — never in the blame path
+> (attribution stays deterministic replay). That's deliberate: it's exactly where an
+> LLM judge belongs, and it keeps the moat's "no LLM decides guilt" property.
+
 ## Setup
 
 **Two products, pick by need:**

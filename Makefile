@@ -44,6 +44,9 @@ phoenix-seed:   ## send demo traces to a running local Phoenix (project 'immune'
 phoenix-clean:  ## wipe the local Phoenix 'immune' project (then: make phoenix-seed)
 	uv run --extra agent python scripts/phoenix_clean.py
 
+arize-report:   ## push traces + LLM-judge evaluator + naive→immune lift to Arize AX cloud
+	uv run --extra agent --env-file .env python scripts/arize_report.py
+
 lock:           ## refresh the lockfile after changing deps
 	uv lock
 
