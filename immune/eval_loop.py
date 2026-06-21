@@ -4,7 +4,11 @@ After each failed benchmark turn:
   1. Claude (JUDGE_MODEL) runs a custom eval against the turn + memory snapshot
   2. The eval produces a label + explanation + culprit memory ID
   3. The explanation is logged as a span event so Phoenix shows it inline
-  4. The suggested action is applied directly to the store (live fix)
+
+IMPORTANT — this is an OBSERVABILITY layer, NOT the blame path. The eval's
+opinion is logged for Arize; it does NOT mutate the store. The deterministic
+ShadowReplay (counterfactual replay) is the ONLY thing that quarantines — so no
+LLM judge is ever in the blame path. (This is the whole moat; don't break it.)
 
 Custom eval labels:
   poisoned_memory  — self-generated / low-trust memory overrode a correct one
@@ -107,33 +111,28 @@ class EvalLoop:
         )
         return _parse(response.content[0].text)
 
-    def apply_feedback(self, result: dict) -> str:
-        """Apply the eval's suggested fix to the memory store."""
+    def summarize(self, result: dict) -> str:
+        """Describe the eval's *suggestion* — WITHOUT mutating the store.
+
+        The eval is observability only: it never quarantines. The deterministic
+        ShadowReplay owns the actual action, so the LLM judge stays out of the
+        blame path. We report what the eval *would* suggest, for the Phoenix span.
+        """
         action = result.get("action", "decay")
         culprit = result.get("culprit")
-        valid_ids = {m["id"] for m in self.store.snapshot()}
-
-        if culprit and culprit in valid_ids:
-            mem = self.store.get(culprit)
-            if mem:
-                trust_before = round(mem.trust, 3)
-                if action == "quarantine":
-                    self.store.quarantine(culprit)
-                elif action == "decay":
-                    self.store.decay(culprit, alpha=0.4)
-                # reroute: no store op — flagged in span for manual follow-up
-                trust_after = round(self.store.get(culprit).trust, 3)
-                return f"eval→{action} {culprit} trust {trust_before}→{trust_after}"
-
-        return f"eval→no-op (culprit={culprit!r})"
+        valid = culprit and culprit in {m["id"] for m in self.store.snapshot()}
+        if valid:
+            return f"eval suggests {action} {culprit} (advisory — replay decides)"
+        return f"eval→no actionable culprit (culprit={culprit!r})"
 
     def run(self, turn: "TurnLog", span=None) -> str | None:
-        """Evaluate a failed turn, log to Phoenix span, apply fix to store."""
+        """Evaluate a failed turn and log to the Phoenix span. Does NOT mutate the
+        store — observability only; ShadowReplay owns the quarantine (blame path)."""
         result = self.evaluate_failure(turn)
         if result is None:
             return None
 
-        summary = self.apply_feedback(result)
+        summary = self.summarize(result)
 
         if span is not None:
             try:

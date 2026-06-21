@@ -12,9 +12,12 @@ CONTRADICTION WITH A HIGHER-TRUST MEMORY:
 
 That is a label you own: provenance gives you the authority, the answer gives you
 the claim, and disagreement between them is grounds to replay. No oracle, no
-human, no second LLM required — though `LLMContradictionDetector` is provided for
-fuzzy phrasing when a key is available (it is NOT in the blame path; it only
-decides *whether to investigate*, never *who is guilty*).
+human, no second LLM required.
+
+Two oracle-free detectors live here: `ContradictionDetector` (default) and
+`SelfConsistencyDetector` (re-ask N times; instability ⇒ suspect). Either way, a
+detector only decides *whether to investigate* — it is never in the blame path
+(`ShadowReplay` proves *who is guilty* by deterministic replay).
 """
 from __future__ import annotations
 
