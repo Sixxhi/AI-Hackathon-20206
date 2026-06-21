@@ -74,21 +74,26 @@ def run_traced_benchmark(tracer, mode: str, evaluator=None) -> list[dict]:
             ans, admitted = agent.answer(turn.question)
             turn.answer, turn.admitted_ids = ans, admitted
             turn.correct = score(ans, turn.expected)
-            span.set_attribute("output.value", ans)
-            span.set_attribute("correct", turn.correct)
             span.set_attribute("admitted_ids", ", ".join(admitted))
 
             if mode == "immune" and not turn.correct:
+                initial = turn.answer                       # the pre-heal (poisoned) answer
                 with tracer.start_as_current_span("shadow_replay_attribution") as attr:
                     attr.set_attribute("openinference.span.kind", "CHAIN")
                     act = replay.handle_failure(turn)
                     attr.set_attribute("confidence", act["confidence"])
                     attr.set_attribute("action", act["action"])
                     attr.set_attribute("culprits", ", ".join(act["culprits"]))
-                ans, _ = agent.answer(turn.question)
-                turn.answer, turn.correct = ans, score(ans, turn.expected)
-                span.set_attribute("healed_answer", ans)
+                ans2, _ = agent.answer(turn.question)
+                turn.answer, turn.correct = ans2, score(ans2, turn.expected)
+                span.set_attribute("initial_answer", initial)   # what it said before healing
+                span.set_attribute("healed", True)
                 span.set_attribute("healed_correct", turn.correct)
+
+            # output.value is the FINAL answer the agent returned (healed if applicable),
+            # so the immune trace shows the corrected answer, not the poison.
+            span.set_attribute("output.value", turn.answer)
+            span.set_attribute("correct", turn.correct)
 
             label, sc = None, None
             if evaluator is not None:
