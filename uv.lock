@@ -1178,7 +1178,7 @@ agent = [
     { name = "arize" },
     { name = "arize-otel" },
     { name = "arize-phoenix" },
-    { name = "openinference-instrumentation-claude-agent-sdk" },
+    { name = "openinference-instrumentation-anthropic" },
 ]
 frontend = [
     { name = "streamlit" },
@@ -1200,7 +1200,7 @@ requires-dist = [
     { name = "arize", marker = "extra == 'agent'", specifier = ">=7.0" },
     { name = "arize-otel", marker = "extra == 'agent'", specifier = ">=0.7" },
     { name = "arize-phoenix", marker = "extra == 'agent'", specifier = ">=5.0" },
-    { name = "openinference-instrumentation-claude-agent-sdk", marker = "extra == 'agent'", specifier = ">=0.1" },
+    { name = "openinference-instrumentation-anthropic", marker = "extra == 'agent'", specifier = ">=0.1" },
     { name = "redis", marker = "extra == 'infra'", specifier = ">=5.0" },
     { name = "sentry-sdk", marker = "extra == 'infra'", specifier = ">=2.0" },
     { name = "streamlit", marker = "extra == 'frontend'", specifier = ">=1.40" },
@@ -1759,8 +1759,8 @@ wheels = [
 ]
 
 [[package]]
-name = "openinference-instrumentation-claude-agent-sdk"
-version = "0.1.6"
+name = "openinference-instrumentation-anthropic"
+version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "openinference-instrumentation" },
@@ -1771,9 +1771,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "wrapt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/12/740229a45646ae8813b88ea538248b303a057445a18317ac8f36671df672/openinference_instrumentation_claude_agent_sdk-0.1.6.tar.gz", hash = "sha256:46a83bba7f69dc50ed15afb56f12339c584c6e2222bfc54998eec5013d2ca2f3", size = 15487, upload-time = "2026-06-11T17:13:35.669Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/19/4dbfd34d997ab3a9fa02b985130282b7be1ca40a138b2520a5fb7fab8f3a/openinference_instrumentation_anthropic-1.0.6.tar.gz", hash = "sha256:da4cb6e8784d5b5f568f430ab2e81cbc61be2e7c87b97eacea34d9b3a3336bf6", size = 16031, upload-time = "2026-06-02T16:37:21.863Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/44/f1599393f7ba7c78eb59994f55ad6066286af255f5e772e5622d5b3b1bb2/openinference_instrumentation_claude_agent_sdk-0.1.6-py3-none-any.whl", hash = "sha256:e8dabb929d1ce186b97f0f661290f572a770774d0ce9580ba4c42511007044b0", size = 17084, upload-time = "2026-06-11T17:13:34.407Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/74/2263a8139b72760c88bad4af3f6f3c7e29dad2c93b977c6cb69a6b01f207/openinference_instrumentation_anthropic-1.0.6-py3-none-any.whl", hash = "sha256:e9834c0bf65523e541204168ec6f1c0a1ad49bfb20edda1f511e3d5a540f7d2f", size = 19307, upload-time = "2026-06-02T16:37:20.671Z" },
 ]
 
 [[package]]

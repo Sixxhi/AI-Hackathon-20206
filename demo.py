@@ -11,12 +11,6 @@ import os
 import sys
 import time
 
-if os.getenv("ARIZE_ENABLED"):
-    import phoenix as px
-    from openinference.instrumentation.anthropic import AnthropicInstrumentor
-    px.launch_app()
-    AnthropicInstrumentor().instrument()
-
 from immune import Agent, ImmuneMemory, MemoryRecord, ShadowReplay, score, scenario
 from immune.tracing import init_tracing, get_tracer, shutdown
 from immune.eval_loop import EvalLoop
@@ -241,6 +235,8 @@ def main():
             t.expected = "90 days"
     released = replay.parole()
     paroled = [pid for pid in poison_ids if pid in released]
+    quarantined_poisons = [pid for pid in poison_ids
+                           if store.get(pid) and store.get(pid).status == "quarantined"]
     if paroled:
         for pid in paroled:
             print(f"  {yellow('Re-trial of quarantined')} {pid}:")
@@ -248,9 +244,11 @@ def main():
             print(f"  Result: {green('NO LONGER FAILS')}")
             print()
         print(f"  {bold(green('→ PAROLED.'))} Quarantine is not a life sentence.")
-    else:
+    elif quarantined_poisons:
         print(f"  Memories still reproduce failures → {red('stay quarantined')}.")
         print(f"  {dim('(guardrail held)')}")
+    else:
+        print(f"  {dim('(no memories were quarantined this run — poison did not fool the agent)')}")
     print(f"\n  Final status of poison memories: "
           + ", ".join(f"{bold(store.get(pid).status)}" for pid in poison_ids))
 

@@ -54,10 +54,10 @@ def init_tracing() -> bool:
 
         _tracer = trace.get_tracer("immune")
 
-        # auto-instrument Anthropic / Claude Agent SDK calls
+        # auto-instrument Anthropic API calls
         try:
-            from openinference.instrumentation.claude_agent_sdk import ClaudeAgentSDKInstrumentor
-            ClaudeAgentSDKInstrumentor().instrument()
+            from openinference.instrumentation.anthropic import AnthropicInstrumentor
+            AnthropicInstrumentor().instrument()
         except ImportError:
             pass
 

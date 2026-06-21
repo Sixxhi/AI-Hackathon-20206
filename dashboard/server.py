@@ -51,7 +51,7 @@ HTML = """<!DOCTYPE html>
   body { background: var(--bg); color: var(--text); font-family: var(--font-sans); min-height: 100vh; display: flex; flex-direction: column; }
   header { border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; background: var(--surface); }
   .logo { display: flex; align-items: center; gap: 12px; }
-  .logo-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--rose); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; }
+  .logo-icon { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, var(--rose), #c48a8c); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: white; flex-shrink: 0; letter-spacing: -1px; font-family: var(--font-sans); box-shadow: 0 2px 8px rgba(155,106,108,0.4); }
   .logo-text { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--white); }
   .logo-sub  { font-size: 12px; color: var(--steel); margin-top: 1px; }
   .status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--steel); }
@@ -104,7 +104,7 @@ HTML = """<!DOCTYPE html>
 <body>
 <header>
   <div class="logo">
-    <div class="logo-icon">IMM</div>
+    <div class="logo-icon">I</div>
     <div>
       <div class="logo-text">IMMUNE</div>
       <div class="logo-sub">Self-healing memory for AI agents</div>
@@ -289,13 +289,38 @@ def stream():
     def generate():
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
-        # Add common uv locations to PATH so subprocess can find it
-        extra = os.path.join(os.path.expanduser('~'), 'AppData', 'Roaming', 'uv', 'bin')
+        env['PYTHONUNBUFFERED'] = '1'
+        # Add uv to PATH
+        extra = os.path.join(os.path.expanduser('~'), '.local', 'bin')
         env['PATH'] = extra + os.pathsep + env.get('PATH', '')
+
+        # Read demo.py and patch out the _pause input() calls
+        demo_path = PROJECT_ROOT / 'demo.py'
+        try:
+            src = demo_path.read_text(encoding='utf-8', errors='replace')
+        except Exception as e:
+            yield 'data: __ERROR__ Cannot read demo.py: ' + str(e) + '\n\n'
+            yield 'data: __DONE__\n\n'
+            return
+
+        # Remove pause so stream flows without waiting for input
+        src = src.replace(
+            'def _pause(msg="  [press enter to continue...]"):\n    input(dim(msg))',
+            'def _pause(msg="  [press enter to continue...]"):\n    pass'
+        )
+
+        # Write patched demo to a temp file
+        import tempfile
+        tmp = tempfile.NamedTemporaryFile(
+            mode='w', suffix='.py', delete=False,
+            encoding='utf-8', dir=str(PROJECT_ROOT)
+        )
+        tmp.write(src)
+        tmp.close()
 
         try:
             proc = subprocess.Popen(
-                [UV, 'run', 'demo.py'],
+                [UV, 'run', tmp.name],
                 cwd=str(PROJECT_ROOT),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -305,19 +330,19 @@ def stream():
                 errors='replace',
             )
         except FileNotFoundError as e:
-            yield 'data: __ERROR__ Could not find uv: ' + str(e) + '\n\n'
+            os.unlink(tmp.name)
+            yield 'data: __ERROR__ Cannot find uv at: ' + UV + ' -- ' + str(e) + '\n\n'
             yield 'data: __DONE__\n\n'
             return
 
         for line in proc.stdout:
             stripped = line.rstrip('\n')
-            if 'press enter' in stripped.lower():
-                continue
             yield 'data: ' + stripped + '\n\n'
 
         proc.wait()
+        os.unlink(tmp.name)
         if proc.returncode != 0:
-            yield 'data: __ERROR__ demo.py exited with code ' + str(proc.returncode) + '\n\n'
+            yield 'data: __ERROR__ Exited with code ' + str(proc.returncode) + '\n\n'
         yield 'data: __DONE__\n\n'
 
     return Response(generate(), mimetype='text/event-stream')
