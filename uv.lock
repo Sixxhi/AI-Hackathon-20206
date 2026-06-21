@@ -1168,7 +1168,7 @@ wheels = [
 ]
 
 [[package]]
-name = "immune"
+name = "immunify"
 version = "0.1.0"
 source = { editable = "." }
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "immune"
+name = "immunify"
 version = "0.1.0"
 description = "Self-healing immune system for agent memory (shadow-replay attribution + parole)"
 readme = "README.md"
