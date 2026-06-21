@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Iterable, Optional
 
 from . import config
+from .provenance import ProvenanceGraph
 from .schemas import MemoryRecord
 
 
@@ -27,12 +28,16 @@ class ImmuneMemory:
         self.gate = gate                       # False -> naive store (no immune filtering)
         self._mems: dict[str, MemoryRecord] = {}
         self._ns = "immune" if gate else "naive"
+        self.provenance = ProvenanceGraph()    # derivation lineage (chain of custody)
         self._redis = _redis_client()          # None unless USE_REDIS + reachable
         _sentry_init()                         # no-op unless USE_SENTRY
 
     # --- write ---------------------------------------------------------------
-    def add(self, mem: MemoryRecord) -> MemoryRecord:
+    def add(self, mem: MemoryRecord, parents: Iterable[str] = ()) -> MemoryRecord:
+        """Store a memory. `parents` records the memories it was DERIVED from, so
+        a later verdict can cascade-quarantine everything distilled from poison."""
         self._mems[mem.id] = mem
+        self.provenance.add(mem.id, parents)
         self._mirror(mem)
         return mem
 
@@ -70,6 +75,18 @@ class ImmuneMemory:
         m.trust = min(m.trust, self.threshold - 0.01)
         self._mirror(m)
         _sentry_quarantine(m)                  # alert: agent isolated a poisoned memory
+
+    def quarantine_cascade(self, mem_id: str) -> list[str]:
+        """Quarantine a culprit AND every memory derived from it (the contamination
+        subtree). Returns all ids quarantined. A rule distilled from poison is
+        poison even when it reads clean — see provenance.py / MemLineage."""
+        targets = self.provenance.contaminated([mem_id])
+        out = []
+        for mid in targets:
+            if mid in self._mems and self._mems[mid].status != "quarantined":
+                self.quarantine(mid)
+                out.append(mid)
+        return sorted(out)
 
     def parole(self, mem_id: str) -> None:
         m = self._mems[mem_id]
