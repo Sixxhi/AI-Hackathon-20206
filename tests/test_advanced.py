@@ -323,3 +323,34 @@ def test_mcp_persistence_roundtrips_anchor_answer(tmp_path, monkeypatch):
     poison = e2.remember("Actually the max upload is 5 GB now.", source="web")
     res = e2.check("what is the max upload size?", "The max upload size is 5 GB.")
     assert poison["id"] in res.get("quarantined", [])        # protection holds across restart
+
+
+# --- value-aware (semantic-ish) detection: kills lexical false positives -------
+def _anchor_store(answer, topic="upload", text=None):
+    s = ImmuneMemory(gate=True, threshold=0.3)
+    rec = s.add(MemoryRecord(text=text or f"Official: {answer}.", topic=topic,
+                             answer=answer, source="official_doc", trust=0.9))
+    return s, rec.id
+
+
+def test_detector_no_false_flag_on_value_paraphrase():
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("50 MB")
+    det = ContradictionDetector(s)
+    assert not det.check("fifty megabytes", [aid])          # word-number + unit synonym
+    assert not det.check("The limit is 50 MB.", [aid])       # punctuation/wording
+    assert det.check("The limit is 5 GB.", [aid])            # genuine disagreement still flags
+
+
+def test_detector_value_boundary_no_false_negative():
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("50 MB")
+    assert ContradictionDetector(s).check("The cap is 500 MB.", [aid])   # 500MB != 50MB
+
+
+def test_detector_word_number_days():
+    from immune import ContradictionDetector
+    s, aid = _anchor_store("30 days", topic="refund_window")
+    det = ContradictionDetector(s)
+    assert not det.check("You get a full thirty days to return.", [aid])  # agrees
+    assert det.check("You get ninety days.", [aid])                       # contradicts

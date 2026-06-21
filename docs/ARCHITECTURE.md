@@ -67,7 +67,12 @@ derived from it). Pure bookkeeping; makes no trust decisions.
 - **`ContradictionDetector`** (default): flags a turn when the answer contradicts
   the highest-trust in-scope `official_doc` memory (≥ `authority_trust`, default
   0.7). No oracle, no human, no second LLM. The trust bar means a low-trust poison
-  can never frame a correct answer as a failure.
+  can never frame a correct answer as a failure. Matching is **value-aware**
+  (normalizes numbers/units/word-numbers), so "thirty days" agrees with "30 days"
+  and "500 MB" ≠ "50 MB" — far fewer false flags than raw substring, still deterministic.
+- **`LLMContradictionDetector`** (optional, key-gated): semantic check for fuzzy
+  paraphrase ("one month" ≈ "30 days"). Detection-only — falls back to the
+  deterministic detector with no key; **never in the blame path**.
 - **`SelfConsistencyDetector`**: re-ask N times; disagreement ⇒ unstable memory.
 - An optional LLM contradiction check exists but is **only** allowed to decide
   *whether to investigate*, never *who is guilty*.

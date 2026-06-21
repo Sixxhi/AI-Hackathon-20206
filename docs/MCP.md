@@ -107,12 +107,13 @@ sessions (defends the cross-session persistence threat).
 - **Defends a pre-registered system-of-record, not arbitrary facts.** `check()`
   needs a trusted anchor on the topic; with no anchor it does nothing (no false
   action, but no protection).
-- **Detection is lexical, not semantic.** It matches the answer against the
-  anchor's stored value, so it's reliable for short factual values (set a crisp
-  `answer=`) but can miss or false-flag paraphrase. Semantic comparison is
-  roadmap. *(The
-  hardening above ensures a paraphrase is at worst flagged for review — never
-  silently overwritten or quarantined.)*
+- **Detection is value-aware, with an optional LLM layer.** The default matcher
+  normalizes numbers/units/word-numbers, so "thirty days" / "fifty megabytes"
+  correctly **agree** with "30 days" / "50 MB", and "500 MB" ≠ "50 MB" — all
+  deterministic and reproducible. For free-form semantic cases ("one month" ≈
+  "30 days"), an optional `LLMContradictionDetector` (key-gated, **detection-only**
+  — never in the blame path) resolves it. Either way a paraphrase is, at worst,
+  flagged for review — never silently overwritten or quarantined.
 - **`healed_answer` is the system-of-record value**, returned verbatim — a
   "here's the authoritative fact" pointer, not a synthesized answer to nuanced
   questions.
