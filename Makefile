@@ -41,6 +41,9 @@ phoenix:        ## launch local Arize Phoenix UI (http://localhost:6006)
 phoenix-seed:   ## send demo traces to a running local Phoenix (project 'immune')
 	uv run --extra agent python scripts/phoenix_seed.py
 
+phoenix-clean:  ## wipe the local Phoenix 'immune' project (then: make phoenix-seed)
+	uv run --extra agent python scripts/phoenix_clean.py
+
 lock:           ## refresh the lockfile after changing deps
 	uv lock
 
