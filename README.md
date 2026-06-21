@@ -1,4 +1,4 @@
-# 🧬 IMMUNIFY — a self-healing immune system for agent memory
+# 🧬 IMMUNE — a self-healing immune system for agent memory
 
 Agents poison their own memory and compound the error. IMMUNE **detects the
 culprit by counterfactual replay** (not a fallible LLM judge), **quarantines**
