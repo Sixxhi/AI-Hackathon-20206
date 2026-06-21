@@ -51,23 +51,36 @@ def seed(store: ImmuneMemory) -> None:
 # --- deterministic semantic retrieval (shared by live answer + replay) -------
 
 def retrieve(store: ImmuneMemory, query: str, k: int = 4,
-             exclude: tuple[str, ...] = ()) -> list[MemoryRecord]:
+             exclude: tuple[str, ...] = (), use_redis: bool | None = None) -> list[MemoryRecord]:
     """Embeddings gate RELEVANCE; recency orders the relevant cluster.
 
     Mirrors the original "topic match -> newest first": similarity decides which
     memories are on-topic (a refund question pulls the refund cluster, not
     shipping), then the freshest on-topic memory wins — so a freshly injected
     poison beats the older true policy, exactly the recency bias we defend.
+
+    When Redis is available the candidate scoring is offloaded to a real
+    RediSearch KNN query (`use_redis` left as None -> auto). The blame path passes
+    `use_redis=False` so attribution never depends on a network service. Either
+    way the FLAT/COSINE index returns the same ranking as in-memory cosine, so the
+    floor + recency logic below is identical.
     """
-    q = embed.embed(query)
     ex = set(exclude)
-    scored = []
-    for m in store.all():
-        if m.id in ex:
-            continue
-        if store.gate and not m.is_admissible(store.threshold):
-            continue                                   # admission gate
-        scored.append((embed.cosine(q, embed.embed(m.text)), m))
+    scored = None
+    if use_redis is not False and getattr(store, "gate", False):
+        cand = store.vector_candidates(query)          # real Redis vector search
+        if cand is not None:
+            scored = [(s, m) for s, m in cand
+                      if m.id not in ex and m.is_admissible(store.threshold)]
+    if scored is None:                                 # in-memory fallback (default offline)
+        q = embed.embed(query)
+        scored = []
+        for m in store.all():
+            if m.id in ex:
+                continue
+            if store.gate and not m.is_admissible(store.threshold):
+                continue                               # admission gate
+            scored.append((embed.cosine(q, embed.embed(m.text)), m))
     if not scored:
         return []
     scored.sort(key=lambda t: -t[0])
@@ -79,8 +92,9 @@ def retrieve(store: ImmuneMemory, query: str, k: int = 4,
 
 
 def _mock_answer(store, query, exclude=()):
-    """Deterministic answer used ONLY in the blame path: the top memory's claim."""
-    hits = retrieve(store, query, exclude=exclude)
+    """Deterministic answer used ONLY in the blame path: the top memory's claim.
+    Forced in-memory (use_redis=False) — the moat must not depend on Redis."""
+    hits = retrieve(store, query, exclude=exclude, use_redis=False)
     return hits[0].answer if hits else "i don't know"
 
 

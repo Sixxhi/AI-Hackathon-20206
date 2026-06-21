@@ -21,6 +21,8 @@ frontend = ["streamlit>=1.40"]                     # P4: visual dashboard
 mcp = ["mcp>=1.2"]                                 # plug IMMUNE into Claude Code / any MCP agent
 agent = [                                          # P3: real agent + eval + tracing
     "anthropic>=0.40",
+    "langgraph>=0.2",                              # drop-in ImmuneStore (BaseStore)
+    "langchain-anthropic>=0.2",                    # real create_react_agent demo
     "arize-phoenix>=5.0",
     "arize>=7.0",
     "arize-otel>=0.7",

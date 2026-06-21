@@ -175,11 +175,19 @@ class Engine:
                 for mid in culprits:
                     taken += self.store.quarantine_cascade(mid)
                 self._save()
+                quarantined = sorted(set(taken))
+                cascade = sorted(set(quarantined) - set(culprits))
                 self.failed.append({"query": query, "expected": flag.expected,
-                                    "culprits": sorted(set(taken))})
+                                    "culprits": quarantined})
                 self._save_failed()               # so parole can re-test this later
-                result.update(culprits=culprits, quarantined=sorted(set(taken)),
+                result.update(culprits=culprits, quarantined=quarantined,
                               healed_answer=chat._mock_answer(self.store, query))
+                # fire a Sentry incident for the poisoning (no-op if SENTRY_DSN unset)
+                from . import sentry_report
+                sentry_report.report_quarantine(
+                    question=query, answer=answer, expected=flag.expected or "",
+                    culprits=culprits, confidence=conf, quarantined=quarantined,
+                    cascade=cascade, replays=attributor.replays, store=self.store)
             else:
                 # Flagged vs the system-of-record but NO memory is attributable
                 # (paraphrase / semantic gap). Do NOT quarantine and do NOT

@@ -94,6 +94,12 @@ class ShadowReplay:
             action["quarantined"] = sorted(set(quarantined))
             action["cascade"] = sorted(set(quarantined) - set(culprits))
             action["replays"] = self.last_replays
+            # report the quarantine to Sentry as a triaged incident (no-op if unset)
+            from . import sentry_report
+            sentry_report.report_quarantine(
+                question=turn.question, answer=turn.answer or "", expected=turn.expected,
+                culprits=culprits, confidence=conf, quarantined=action["quarantined"],
+                cascade=action["cascade"], replays=self.last_replays, store=self.store)
         else:
             # ambiguous: soft-decay only, quarantine nothing (anti-autoimmune)
             for mid in turn.admitted_ids:

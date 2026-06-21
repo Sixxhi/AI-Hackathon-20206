@@ -1,4 +1,4 @@
-.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo dashboard up down logs lock clean
+.PHONY: setup setup-all lane-infra lane-agent lane-frontend test demo demo-langgraph demo-agent dashboard up down logs lock clean
 
 setup:          ## sync venv + dev deps (everyone runs this first)
 	uv sync
@@ -31,6 +31,12 @@ test:           ## run invariant tests
 
 demo:           ## run the side-by-side demo
 	uv run demo.py
+
+demo-langgraph: ## offline deterministic break-and-heal (can't-fail backup)
+	uv run --extra agent python demo_langgraph.py
+
+demo-agent:     ## LIVE: real LangGraph+Claude agent poisoned & healed (needs key)
+	IMMUNE_LIVE=1 uv run --extra agent python agent_langgraph.py
 
 dashboard:      ## launch the visual dashboard (http://localhost:8501)
 	uv run --extra frontend streamlit run dashboard/app.py

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "immune": {
+      "command": "/Users/ovoievodin/zasha/AI-Hackathon-20206/.venv/bin/python",
+      "args": ["-m", "immune.mcp_server"],
+      "env": {
+        "IMMUNE_RECORD_PATH": "/Users/ovoievodin/zasha/AI-Hackathon-20206/immune_record.jsonl",
+        "IMMUNE_STORE_PATH": "/Users/ovoievodin/zasha/AI-Hackathon-20206/immune_store.json"
+      }
+    }
+  }
+}

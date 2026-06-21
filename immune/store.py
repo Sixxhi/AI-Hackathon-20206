@@ -30,6 +30,7 @@ class ImmuneMemory:
         self._ns = "immune" if gate else "naive"
         self.provenance = ProvenanceGraph()    # derivation lineage (chain of custody)
         self._redis = _redis_client()          # None unless USE_REDIS + reachable
+        self._index_ready = False              # RediSearch vector index created lazily
         _sentry_init()                         # no-op unless USE_SENTRY
 
     # --- write ---------------------------------------------------------------
@@ -74,7 +75,9 @@ class ImmuneMemory:
         m.status = "quarantined"
         m.trust = min(m.trust, self.threshold - 0.01)
         self._mirror(m)
-        _sentry_quarantine(m)                  # alert: agent isolated a poisoned memory
+        # Sentry reporting moved to immune/sentry_report.py — fired once per
+        # attribution (with full root-cause context) from replay/mcp, not once
+        # per memory here, so cascades don't spam duplicate issues.
 
     def quarantine_cascade(self, mem_id: str) -> list[str]:
         """Quarantine a culprit AND every memory derived from it (the contamination
@@ -105,20 +108,44 @@ class ImmuneMemory:
             for m in sorted(self._mems.values(), key=lambda m: m.seq)
         ]
 
-    # --- Redis mirror (side effect, never read by the moat) ------------------
+    # --- Redis vector search (recall path; the moat still reads in-memory) ----
     def _mirror(self, m: MemoryRecord) -> None:
         if self._redis is None:
             return
         try:
+            from . import embed, redis_index
+            if not self._index_ready:
+                redis_index.ensure_index(self._redis, self._ns, dim=len(embed.embed("x")))
+                self._index_ready = True
             self._redis.hset(f"immune:{self._ns}:mem:{m.id}", mapping={
                 "id": m.id, "topic": m.topic or "", "text": m.text,
                 "answer": getattr(m, "answer", "") or "",
                 "source": m.source, "trust": f"{m.trust:.4f}", "status": m.status,
                 "seq": str(m.seq),
+                "embedding": redis_index.vec_bytes(embed.embed(m.text)),
             })
             self._redis.sadd(f"immune:{self._ns}:ids", m.id)
         except Exception:
             self._redis = None                 # degrade silently; demo must never break
+
+    @property
+    def vector_backend(self) -> str:
+        """Where recall runs: real Redis vector search, or the in-memory fallback."""
+        return "Redis vector search (RediSearch KNN)" if self._redis is not None else "in-memory cosine"
+
+    def vector_candidates(self, query: str, k: int = 50):
+        """Recall via real RediSearch KNN. Returns [(similarity, MemoryRecord)] or
+        None when Redis is unavailable (caller then falls back to in-memory cosine).
+        Quarantined memories are excluded by the index query itself."""
+        if self._redis is None:
+            return None
+        try:
+            from . import embed, redis_index
+            qv = embed.embed(query)
+            hits = redis_index.knn(self._redis, self._ns, qv, k)
+            return [(sim, self._mems[mid]) for mid, sim in hits if mid in self._mems]
+        except Exception:
+            return None
 
 
 def _redis_client():
@@ -126,7 +153,11 @@ def _redis_client():
         return None
     try:
         import redis
-        client = redis.from_url(config.REDIS_URL, decode_responses=True)
+        # RESP2 + binary: vector search needs raw float32 blobs (decode_responses
+        # would corrupt them) and the classic list reply format for FT.SEARCH. We
+        # never read text values back from Redis — the in-memory store is the
+        # source of truth — so binary mode costs nothing.
+        client = redis.from_url(config.REDIS_URL, protocol=2)
         client.ping()
         return client
     except Exception:
