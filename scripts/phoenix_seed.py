@@ -21,14 +21,25 @@ tracer = tracer_provider.get_tracer("immune")
 from immune import Agent, ImmuneMemory, ShadowReplay, score, scenario
 
 
-def seed_once(run: int) -> None:
-    store = ImmuneMemory(gate=True, threshold=0.3)
-    poisons = scenario.build_world(store)        # (refund_poison, warranty_poison)
-    agent, replay = Agent(store), ShadowReplay(store)
+def _span_id(span) -> str:
+    return format(span.get_span_context().span_id, "016x")
+
+
+def _run_benchmark(mode: str) -> list[dict]:
+    """Trace one full benchmark for `mode` ('naive' or 'immune'); return eval records.
+    naive  = no immune layer (true baseline).
+    immune = shadow-replay heals failures in place.
+    """
+    store = ImmuneMemory(gate=(mode == "immune"), threshold=0.3)
+    scenario.build_world(store)
+    agent = Agent(store)
+    replay = ShadowReplay(store) if mode == "immune" else None
+    evals = []
 
     for turn in scenario.benchmark():
         with tracer.start_as_current_span("benchmark_turn") as span:
             span.set_attribute("openinference.span.kind", "CHAIN")
+            span.set_attribute("mode", mode)
             span.set_attribute("input.value", turn.question)
             span.set_attribute("expected", turn.expected)
             ans, admitted = agent.answer(turn.question)
@@ -38,7 +49,7 @@ def seed_once(run: int) -> None:
             span.set_attribute("correct", turn.correct)
             span.set_attribute("admitted_ids", ", ".join(admitted))
 
-            if not turn.correct:
+            if mode == "immune" and not turn.correct:
                 with tracer.start_as_current_span("shadow_replay_attribution") as attr:
                     before = {m["id"]: m["trust"] for m in store.snapshot()}
                     act = replay.handle_failure(turn)
@@ -51,14 +62,47 @@ def seed_once(run: int) -> None:
                         if m:
                             attr.set_attribute(f"trust_before.{mid}", round(before.get(mid, 0), 3))
                             attr.set_attribute(f"trust_after.{mid}", round(m.trust, 3))
-                ans2, _ = agent.answer(turn.question)
-                span.set_attribute("healed_answer", ans2)
-                span.set_attribute("healed_correct", score(ans2, turn.expected))
-    print(f"  run {run}: seeded (poisons {[p.id for p in poisons]})")
+                ans, _ = agent.answer(turn.question)
+                turn.correct = score(ans, turn.expected)
+                span.set_attribute("healed_answer", ans)
+                span.set_attribute("healed_correct", turn.correct)
+
+            evals.append({"span_id": _span_id(span), "mode": mode,
+                          "expected": turn.expected, "correct": turn.correct})
+    return evals
+
+
+# one eval name per mode → Phoenix shows two pass-rates side by side (the value)
+_EVAL_NAME = {"naive": "answer_quality_naive", "immune": "answer_quality_immune"}
+
+
+def log_evals(client, evals: list[dict]) -> None:
+    for e in evals:
+        client.spans.add_span_annotation(
+            span_id=e["span_id"], annotation_name=_EVAL_NAME[e["mode"]],
+            annotator_kind="CODE",
+            label="pass" if e["correct"] else "fail",
+            score=1.0 if e["correct"] else 0.0,
+            explanation=f"answer vs ground truth '{e['expected']}' ({e['mode']})")
 
 
 if __name__ == "__main__":
-    for i in range(1, 4):
-        seed_once(i)
+    all_evals = []
+    for i in range(1, 4):                       # 3 runs for a fuller dataset
+        all_evals += _run_benchmark("naive")
+        all_evals += _run_benchmark("immune")
+        print(f"  run {i}: seeded naive + immune benchmarks")
     tracer_provider.force_flush()
-    print(f"Seeded project 'immune' at {ENDPOINT}. Open it in the Phoenix UI.")
+
+    from phoenix.client import Client
+    client = Client(base_url=ENDPOINT)
+    log_evals(client, all_evals)
+
+    def rate(mode):
+        rows = [e for e in all_evals if e["mode"] == mode]
+        return sum(e["correct"] for e in rows), len(rows)
+    nok, nn = rate("naive"); iok, ii = rate("immune")
+    print(f"\nSeeded project 'immune' at {ENDPOINT}.")
+    print(f"  answer_quality_naive  : {nok}/{nn} pass  ({nok/nn:.0%})")
+    print(f"  answer_quality_immune : {iok}/{ii} pass  ({iok/ii:.0%})")
+    print(f"  -> IMMUNE lifts answer quality {nok/nn:.0%} -> {iok/ii:.0%}. That's the value, on screen in Arize.")

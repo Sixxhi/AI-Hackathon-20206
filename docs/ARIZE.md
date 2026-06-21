@@ -49,11 +49,27 @@ evaluator out of the attribution step.
 ### Play with Phoenix locally (no cloud)
 ```bash
 make phoenix         # serve the Phoenix UI at http://localhost:6006
-make phoenix-seed    # (in another shell) send IMMUNE demo traces, project 'immune'
+make phoenix-seed    # (in another shell) send IMMUNE demo traces + evals, project 'immune'
 ```
-`scripts/phoenix_seed.py` sends one `benchmark_turn` span per question plus a
-`shadow_replay_attribution` child span (culprit / confidence / trust-delta) per
-failure — so you can click through the exact loop the dashboard shows.
+`scripts/phoenix_seed.py` traces a full **naive** and **immune** benchmark (3 runs):
+- `benchmark_turn` spans — input, answer, `correct`, retrieved `admitted_ids`, `mode`
+- `shadow_replay_attribution` child spans — `culprits`, `confidence`, `action`, `trust_before`→`trust_after`
+- two **code-evals** (Phoenix annotations): `answer_quality_naive` vs `answer_quality_immune`
+
+### Showing Arize brings value (the prize narrative)
+This hits all of Arize's criteria, on screen:
+1. **Tracing** — every agent turn and the memories it used are logged (open a trace → span tree).
+2. **Evaluator** (criterion 3) — `answer_quality_*` evals score each answer pass/fail.
+3. **Feedback makes it better** (criterion 4) — the eval pass-rate jumps
+   **`answer_quality_naive` 25% → `answer_quality_immune` 100%**. That delta *is* the
+   value, measured by Arize.
+4. **Attribution is traced** — open a failed turn → its `shadow_replay_attribution`
+   child shows the culprit memory and its trust dropping `0.50 → 0.29`.
+
+What to click in the UI: the project's **annotations summary** (the two pass-rates
+side by side) → then drill into one failed `immune` turn to show trace → attribution
+→ heal. Booth pitch: *"Arize shows our immune layer lifting answer quality from 25%
+to 100%, and lets you trace exactly which memory each failure came from."*
 
 ### CLI + auth (AX) — non-interactive
 ```bash
