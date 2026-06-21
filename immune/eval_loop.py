@@ -72,7 +72,9 @@ def _parse(text: str) -> dict:
 
 
 class EvalLoop:
-    """Runs a live Claude-as-judge eval after each failure and applies the fix."""
+    """Runs a live Claude-as-judge eval after each failure for OBSERVABILITY only.
+    It logs the diagnosis to the Phoenix span and never mutates the store — the
+    deterministic ShadowReplay is the sole thing that quarantines (blame path)."""
 
     def __init__(self, store: "ImmuneMemory"):
         self.store = store

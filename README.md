@@ -30,6 +30,7 @@ agent fails, find the memory that caused it and lower its trust.** That's IMMUNE
 - [docs/PLAN.md](docs/PLAN.md) — the 4-person parallel build plan: ownership, dependencies, timeline.
 - [docs/tasks/](docs/tasks/) — **per-person task board**: tracer-bullet slices to grab and tick off (P1–P4).
 - [docs/ARIZE.md](docs/ARIZE.md) — Arize integration runbook (P3): prize criteria, setup, evals, the meta-eval talking point.
+- [docs/MCP.md](docs/MCP.md) — plug IMMUNE into Claude Code as an MCP server (`claude mcp add` + scripted demo).
 - [docs/REDIS.md](docs/REDIS.md) — Redis integration runbook (P2): setup paths, vector search, Sentry on quarantine.
 - [TEAM.md](TEAM.md) — onboarding and per-lane ownership.
 

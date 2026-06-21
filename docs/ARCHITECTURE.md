@@ -9,7 +9,7 @@ Arize/Phoenix, Sentry, and an MCP server attach as additive layers.
 
 ```
 write   →  ImmuneMemory.add(mem, parents)        record + provenance edge        store.py
-retrieve→  ImmuneMemory.search(topic)            admission gate (trust+status)   store.py / embed.py
+retrieve→  ImmuneMemory.search(topic) | chat.retrieve  admission gate (trust+status)  store.py / embed.py
 answer  →  Agent.answer(q)                       mock (default) or live Claude   agent.py
 detect  →  ContradictionDetector.check()         answer vs high-trust anchor     detectors.py   ← no oracle
 attribute→ ShadowReplay.handle_failure()         group-testing replay → culprits replay.py / attribution.py  ★
@@ -43,6 +43,11 @@ Zero-dependency hashed character-n-gram + word-bigram vectors (blake2b, L2-norm,
 256-dim). **Byte-for-byte reproducible** across machines — this is what lets
 free-text retrieval coexist with reproducible replay. Same interface as a neural
 embedder, swappable later.
+
+> **Two retrieval paths (be precise):** the **benchmark / demo / dashboard** use
+> keyword-topic + recency (`store.search`); the **chat + MCP** use these
+> **embeddings** (`chat.retrieve`) for free-text. Don't claim "semantic retrieval
+> everywhere" — say "topic+recency in the benchmark, embeddings in the live chat/MCP."
 
 ### `immune/provenance.py` — derivation DAG
 Tracks `parent → child` memory lineage. When attribution blames a node,

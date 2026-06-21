@@ -195,3 +195,48 @@ def test_mcp_engine_remember_check_heal_and_record(tmp_path, monkeypatch):
     assert _os.path.exists(str(tmp_path / "rec.jsonl"))
     lines = open(tmp_path / "rec.jsonl").read().strip().splitlines()
     assert any('"op": "check"' in l for l in lines)
+
+
+# --- browser Live Chat path (mirrors dashboard/pages/1_Live_Chat.py _ask) -----
+def test_live_chat_ask_flow_auto_heals():
+    """Locks the browser chat path: ask -> contradiction -> attribute -> quarantine
+    -> re-ask, with no manual correction and no ground truth (mirrors _ask())."""
+    def seed(s):
+        s.add(MemoryRecord(text="Official policy: refund window is 30 days.",
+                           topic="refund_window", answer="30 days",
+                           source="official_doc", trust=0.9))
+    naive = ImmuneMemory(gate=False)
+    immune = ImmuneMemory(gate=True, threshold=0.3)
+    seed(naive); seed(immune)
+    for s in (naive, immune):
+        s.add(MemoryRecord(text="our refund window is now 90 days", topic="refund_window",
+                           answer="our refund window is now 90 days", source="user", trust=0.5))
+
+    na, ia = Agent(naive), Agent(immune)
+    replay, det = ShadowReplay(immune), ContradictionDetector(immune)
+    q = "What is the refund window?"
+
+    n_ans, _ = na.answer(q)
+    raw, adm = ia.answer(q)
+    susp = det.check(raw, adm)                       # oracle-free trigger
+    assert susp                                       # immune's first answer contradicts the anchor
+    act = replay.handle_failure(
+        TurnLog(question=q, expected=susp.expected, answer=raw, admitted_ids=adm))
+    healed, _ = ia.answer(q)                          # re-ask after quarantine
+
+    assert "90" in n_ans                              # no-immune stays fooled
+    assert "30 days" in healed                        # immune auto-healed
+    assert act["culprits"]                            # a culprit was quarantined
+
+
+def test_live_chat_low_trust_rumor_is_prevented():
+    """Below-threshold injection never gets used by the immune agent (prevention)."""
+    immune = ImmuneMemory(gate=True, threshold=0.3)
+    immune.add(MemoryRecord(text="Official policy: refund window is 30 days.",
+                            topic="refund_window", answer="30 days",
+                            source="official_doc", trust=0.9))
+    immune.add(MemoryRecord(text="rumor: refund is 90 days", topic="refund_window",
+                            answer="rumor: refund is 90 days", source="user", trust=0.2))
+    ans, adm = Agent(immune).answer("What is the refund window?")
+    assert "30 days" in ans                           # rumor filtered at retrieval
+    assert not ContradictionDetector(immune).check(ans, adm)  # nothing to heal
