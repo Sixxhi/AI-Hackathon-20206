@@ -1,4 +1,5 @@
 > 📄 **Published on AI Alignment Forum:** [IMMUNE: Deterministic Memory Attribution for AI Agents Using Delta Debugging] [https://www.alignmentforum.org/posts/wnbteE9uR6GEJ56aD/immune-deterministic-memory-attribution-for-ai-agents-using](https://www.alignmentforum.org/editPost?postId=wnbteE9uR6GEJ56aD&key=b6033fd8dd31d294910b3e65f22105)
+> > 📄 **Published on dev.to:** [IMMUNE: Deterministic Memory Attribution for AI Agents Using Delta Debugging](https://dev.to/siddhi_prajapati_6eb49986/immune-deterministic-memory-attribution-for-ai-agents-using-delta-debugging-lb2)
 # 🧬 IMMUNE — a self-healing immune system for agent memory
 
 Agents poison their own memory and compound the error. IMMUNE **detects the
